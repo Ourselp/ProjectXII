@@ -36,6 +36,14 @@ function groups(m, L) {
   });
 }
 
+const IID = '<interactiveId>k__BackingField';
+function interactives(m) {
+  const out = [];
+  for (const L of ['background', 'middleground', 'foreground']) for (const g of m[L + 'MapElements']) for (const e of g.mapElements)
+    if (e[IID]) out.push([e.gfxId, r(e.position.x), r(e.position.y), r(e.scale.x, 3), r(e.scale.y, 3), g.cellId ?? -1, e[IID], 0]);
+  for (const e of m.mapAnimatedElements) if (e[IID]) out.push([e.gfxId, r(e.position.x), r(e.position.y), r(e.scale.x, 3), r(e.scale.y, 3), e.cellId ?? -1, e[IID], 1]);
+  return out;
+}
 const gfx = new Set(), index = {}, sounds = {};
 let n = 0;
 for (const d of fs.readdirSync('extract/raw_maps')) for (const f of fs.readdirSync('extract/raw_maps/' + d)) {
@@ -55,6 +63,8 @@ for (const d of fs.readdirSync('extract/raw_maps')) for (const f of fs.readdirSy
       back: groups(m, 'background'), mid: groups(m, 'middleground'), fore: groups(m, 'foreground'),
       anim: m.mapAnimatedElements.map(e => [...el(e), e.cellId ?? -1]),
       // bit0 walkable, bit1 map change, bits 8+: mapChangeData (direction mask)
+      // interactive elements (zaap, doors, resources…): [gfxId, x, y, scaleX, scaleY, cellId, interactiveId, animated]
+      inter: interactives(m),
       cells: m.cellsData.map(c => (c.mov ? 1 : 0) | (c.mapChangeData ? 2 : 0) | (c.mapChangeData << 8)),
     };
     for (const L of ['back', 'mid', 'fore']) for (const g of out[L]) for (const e of g[3]) gfx.add(e[0]);

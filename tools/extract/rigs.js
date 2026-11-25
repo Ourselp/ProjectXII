@@ -43,10 +43,15 @@ function skinParts(s) {
     }
     // display list = tree in prefix order: `entries` = number of following entries it owns; symbolId -1 = one geometry chunk;
     // entries 0 = empty symbol = mount point named referencedSymbols[symbolId] (hat, hair, mask... from another skin), with its transform
-    const seq = []; let k2 = 0, mounts = 0;
+    // chunks inside a hair group (symbol name "cheveux…") get a 3rd value 1: hidden when a hat is worn
+    const seq = [], groups = []; let k2 = 0, mounts = 0;
     for (const e of p.DisplayListEntry) {
-      if (e.symbolId < 0) { if (k2 < chunks.length) seq.push(chunks[k2++]); }
+      const hair = groups.some(g => /cheveux/i.test(g.name));
+      for (const g of groups) g.left--;
+      while (groups.length && groups[groups.length - 1].left <= 0) groups.pop();
+      if (e.symbolId < 0) { if (k2 < chunks.length) seq.push(hair ? [...chunks[k2++], 1] : chunks[k2++]); }
       else if (e.entries === 0) { const t = e.transform; seq.push([s.referencedSymbols[e.symbolId], +t.rX.toFixed(4), +t.uX.toFixed(4), +t.tX.toFixed(3), +t.rY.toFixed(4), +t.uY.toFixed(4), +t.tY.toFixed(3)]); mounts++; }
+      else groups.push({ name: s.referencedSymbols[e.symbolId] || '', left: e.entries });
     }
     while (k2 < chunks.length) seq.push(chunks[k2++]);
     if (i.length || mounts) parts[name] = { v, i, seq };

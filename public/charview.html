@@ -14,7 +14,7 @@ const kind = new URLSearchParams(location.search).get('anim') || 'Marche';
 let f = 0;
 (function loop() {
   gl.clearColor(.48, .6, .53, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-  if (L?.ready) [0, 1, 2, 5, 6].forEach((d, i) => drawRig(gl, kind.startsWith('Statique') ? L.idle : L.move, L.skins, `Anim${kind}_${d}`, f, 100 + i * 200, 380, L.scale * 1.6, false, L.cols));
+  if (L?.ready) [0, 1, 2, 5, 6].forEach((d, i) => drawRig(gl, kind.startsWith('Statique') ? L.idle : L.move, L.skins, `Anim${kind}_${d}`, f, 100 + i * 200, 380, L.scale * 1.6, false, L.cols, undefined, L.hideHair));
   f++; document.title = 'ok ' + f; setTimeout(loop, 1000 / 30);
 })();
 </script></body></html>

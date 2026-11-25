@@ -44,5 +44,5 @@ export async function buildLook(gl) {
   const b = breedOf(), L = b.looks[state.gender], head = (D.heads[`${b.id}_${state.gender}`] || [])[state.head];
   const ids = [head?.skin, ...Object.keys(SLOTS).map(s => state[s]), L.skin].filter(Boolean);
   const [move, idle, ...skins] = await Promise.all([loadRig(gl, '1-movement'), loadRig(gl, '1-static'), ...ids.map(id => loadSkin(gl, id))]);
-  return { ready: !!(move && idle), move, idle, skins: skins.filter(Boolean), cols: colorsOf(state.colors || L.colors), scale: L.scale / 100 };
+  return { ready: !!(move && idle), move, idle, skins: skins.filter(Boolean), cols: colorsOf(state.colors || L.colors), scale: L.scale / 100, hideHair: !!state.hat };
 }

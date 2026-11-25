@@ -39,7 +39,7 @@ export async function loadSkin(gl, id) {
 export const colorsOf = list => { const c = new Float32Array(21); list.forEach((v, i) => { if (i < 6) c.set([(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255], (i + 1) * 3); }); return c; };
 const NO_COLS = colorsOf([]);
 
-export function drawRig(gl, rig, skins, anim, frame, x, y, scale, flip, cols = NO_COLS, tint = [1, 1, 1, 1]) {
+export function drawRig(gl, rig, skins, anim, frame, x, y, scale, flip, cols = NO_COLS, tint = [1, 1, 1, 1], hideHair = false) {
   const frames = rig.anims[anim]; if (!frames || !frames.length) return;
   const fr = frames[frame % frames.length], sx = flip ? -scale : scale, runs = [];
   const find = name => { for (const s of skins) if (s && s.parts[name]) return [s.parts[name], s.gltex]; return [rig.parts[name], rig.gltex]; };
@@ -54,7 +54,7 @@ export function drawRig(gl, rig, skins, anim, frame, x, y, scale, flip, cols = N
         emit(q, qt, [a * ma + b * mc2, a * mb + b * md, a * mtx + b * mty + tx, c * ma + d * mc2, c * mb + d * md, c * mtx + d * mty + ty], mc, depth + 1);
         continue;
       }
-      if (!t) continue;
+      if (!t || (item[2] && hideHair)) continue; // item[2] = hair chunk, hidden under a hat
       if (!runs.length || runs[runs.length - 1][0] !== t) runs.push([t, []]);
       const out = runs[runs.length - 1][1];
       for (let j = item[0]; j < item[0] + item[1]; j++) {

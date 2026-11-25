@@ -15,15 +15,27 @@ export function toggle(name, force) {
   if (show) { w.style.zIndex = ++z; dispatchEvent(new CustomEvent('window', { detail: name })); }
 }
 let z = 20;
+function wireWindow(w) {
+  w.querySelector('.x').onclick = () => toggle(w.id.slice(4), false);
+  const h = w.querySelector('h2'); let d = null;
+  h.onpointerdown = e => { if (e.target.closest('button')) return; d = [e.clientX - w.offsetLeft, e.clientY - w.offsetTop]; h.setPointerCapture(e.pointerId); w.style.zIndex = ++z; }; // not on ✕, or capture eats its click
+  h.onpointermove = e => { if (d) { w.style.left = e.clientX - d[0] + 'px'; w.style.top = Math.max(0, e.clientY - d[1]) + 'px'; } };
+  h.onpointerup = () => d = null;
+}
+// window built from code (zaap, door menu…): returns its body element; show it with toggle(name, true)
+export function makeWindow(name, title) {
+  let w = $(`#win-${name}`);
+  if (!w) {
+    w = document.createElement('div'); w.id = `win-${name}`; w.className = 'win panel'; w.hidden = true;
+    w.innerHTML = `<h2>${title}<button class="x">✕</button></h2><div class="body"></div>`;
+    document.body.append(w); wireWindow(w);
+  }
+  w.querySelector('h2').firstChild.textContent = title;
+  return w.querySelector('.body');
+}
 function setupWindows() {
   document.querySelectorAll('[data-win]').forEach(b => b.addEventListener('click', () => toggle(b.dataset.win)));
-  document.querySelectorAll('.win').forEach(w => {
-    w.querySelector('.x').onclick = () => toggle(w.id.slice(4), false);
-    const h = w.querySelector('h2'); let d = null;
-    h.onpointerdown = e => { d = [e.clientX - w.offsetLeft, e.clientY - w.offsetTop]; h.setPointerCapture(e.pointerId); w.style.zIndex = ++z; };
-    h.onpointermove = e => { if (d) { w.style.left = e.clientX - d[0] + 'px'; w.style.top = Math.max(0, e.clientY - d[1]) + 'px'; } };
-    h.onpointerup = () => d = null;
-  });
+  document.querySelectorAll('.win').forEach(wireWindow);
   const keys = { c: 'stats', s: 'spells', i: 'inventory', a: 'look', m: 'map', o: 'options' };
   addEventListener('keydown', e => {
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
@@ -84,7 +96,7 @@ function drawPreviews() {
   for (const p of previews) {
     const { gl, look: L } = p; if (!L?.ready || gl.canvas.closest('[hidden]')) continue;
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-    drawRig(gl, L.idle, L.skins, `AnimStatiqueExplo0_${p.dir}`, Math.floor(frame / 2), gl.canvas.width / 2, gl.canvas.height * .86, L.scale * 1.7, false, L.cols);
+    drawRig(gl, L.idle, L.skins, `AnimStatiqueExplo0_${p.dir}`, Math.floor(frame / 2), gl.canvas.width / 2, gl.canvas.height * .86, L.scale * 1.7, false, L.cols, undefined, L.hideHair);
   }
   requestAnimationFrame(drawPreviews);
 }

@@ -3,7 +3,7 @@
 const V = new URL(import.meta.url).search;
 const { loadRig, drawRig, BUST } = await import('./rig.js' + V);
 const { setupLook, buildLook } = await import('./look.js' + V);
-const { setupHud, chat, nameAt, onCommand, toggle } = await import('./hud.js' + V);
+const { setupHud, chat, nameAt, onCommand, toggle, makeWindow } = await import('./hud.js' + V);
 const { setupWorldMap } = await import('./worldmap.js' + V);
 
 const cv = document.getElementById('c');
@@ -74,7 +74,7 @@ function sprite([g, x, y, scx, scy, rot, col], fx, i) {
       const cx = fx.r[0] * scx, cy = fx.r[1] * scy; x += cx - (cx * Math.cos(a) - cy * Math.sin(a)); y += cy - (cx * Math.sin(a) + cy * Math.cos(a)); rot += d; }
     if (fx.c) { const k = (1 + Math.sin(TAU * fx.c[1] * time + ph)) / 2, f = fx.c[0] >>> 0;
       col = [24, 16, 8, 0].reduce((acc, s) => acc + Math.round((col >>> s & 255) * (1 - k) + (f >>> s & 255) * k) * 2 ** s, 0); }
-    if (fx.d) col = ((col >>> 24) * (1 - fx.d) << 24 | col & 0xffffff) >>> 0;
+    if (fx.d) col = (Math.round((col >>> 24) * Math.max(0, 1 - fx.d) ** 2) * 2 ** 24 + (col & 0xffffff)) >>> 0; // dissolve: ~ share of noise above alphaClip
     if (fx.w) gl.uniform3f(U.wind, -(fx.w[0] * W) / Math.abs(T.h * scy), fx.w[1] * fx.w[2] / 86 * 6 / Math.abs(T.w * scx), ph);
   }
   const a = -rot * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a), z = cam.z;
@@ -122,6 +122,14 @@ async function enterMap(id, cell) {
     for (const [g, T] of tex) if (!keep.has(g)) { const v = await T; if (v && v.t) gl.deleteTexture(v.t); tex.delete(g); }
     // depth list: middleground groups + animated elements, by cell (the hero is inserted while drawing)
     m.depth = [...m.mid, ...m.anim.map(e => [e[7], 0, 0, [e], true])].sort((a, b) => a[0] - b[0]);
+    // art bounds (background layer, ignoring stretched overlays) for the camera
+    const A = { x0: GRID.l, x1: GRID.r, y0: GRID.b, y1: GRID.t };
+    for (const g of m.back) for (const [gid, x, y, scx, scy] of g[3]) {
+      const T = tex.get(gid); if (!T || Math.abs(scx) > 2.5 || Math.abs(scy) > 2.5) continue;
+      const w = T.w * Math.abs(scx) / 2, h = T.h * Math.abs(scy) / 2;
+      A.x0 = Math.min(A.x0, x - w); A.x1 = Math.max(A.x1, x + w); A.y0 = Math.min(A.y0, y - h); A.y1 = Math.max(A.y1, y + h);
+    }
+    m.art = A; hovered = null; hero.action = null; camY = null;
     map = m;
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
     [hero.x, hero.y] = cellXY(cell); hero.cell = cell; hero.path = [];
@@ -172,16 +180,69 @@ const sideExits = side => map.nb[side] > 0 && mapIndex[map.nb[side]] ? map.cells
 // exit cursors: green arrow (own SVG) pointing to the side (top, bottom, left, right)
 const arrow = deg => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><g transform="rotate(${deg} 16 16)"><polygon points="16,3 29,16 21,16 21,29 11,29 11,16 3,16" fill="#46d64f" stroke="#0a3a10" stroke-width="2" stroke-linejoin="round"/></g></svg>`)}") 16 16, pointer`;
 const CURSOR = [arrow(0), arrow(180), arrow(270), arrow(90)];
+// ---------- interactive elements (zaap, doors, resources…): hover highlight, click = walk next to it then act
+// Which element is what is server data: zaaps are recognised by their sprite (data/zaaps.json, tools/extract/zaaps.js);
+// any other element leads to the maps sharing these coordinates (interiors / exits), if there are some.
+let hovered = null, camY = null, zaaps = { gfx: [], list: [] };
+function rigBox(r) { // bounds of the rig's default animation, first frame (rig units, y up)
+  if (r.box) return r.box;
+  const b = [1e9, 1e9, -1e9, -1e9];
+  for (const [n, a, bb, tx, c, d, ty] of (r.anims[r.def] || [])[0] || []) { const p = r.parts[r.nodes[n]]; if (!p) continue;
+    for (let k = 0; k < p.v.length; k += 5) { const X = a * p.v[k] + bb * p.v[k + 1] + tx, Y = c * p.v[k] + d * p.v[k + 1] + ty; b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y); } }
+  return r.box = b[0] < 1e9 ? b : [-40, 0, 40, 100];
+}
+function interAt(wx, wy) {
+  let best = null, area = 1e12;
+  for (const it of map.inter || []) {
+    const [g, x, y, scx, scy, , , anim] = it; let x0, x1, y0, y1;
+    if (anim) { const r = rigs.get(g); if (!r) continue; const [a, b, c, d] = rigBox(r), s = Math.abs(scx); [x0, x1] = scx < 0 ? [x - c * s, x - a * s] : [x + a * s, x + c * s]; [y0, y1] = [y + b * s, y + d * s]; }
+    else { const T = tex.get(g); if (!T || !T.t) continue; const w = T.w * Math.abs(scx) / 2, h = T.h * Math.abs(scy) / 2; [x0, x1, y0, y1] = [x - w, x + w, y - h, y + h]; }
+    const ar = (x1 - x0) * (y1 - y0);
+    if (wx >= x0 && wx <= x1 && wy >= y0 && wy <= y1 && ar < area) { best = it; area = ar; }
+  }
+  return best;
+}
+async function interact(it) {
+  if (zaaps.gfx.includes(it[0])) return openZaap();
+  const [x, y] = mapIndex[map.id], others = Object.entries(mapIndex).filter(([id, p]) => +id !== map.id && p[0] === x && p[1] === y).map(([id]) => +id);
+  if (!others.length) return chat('Rien à faire ici pour l\'instant.', 'warn');
+  const names = await Promise.all(others.map(id => fetch(`maps/${id}.json${BUST}`, { cache: 'no-store' }).then(r => r.json()).then(m => m.name).catch(() => '')));
+  const body = makeWindow('enter', 'Entrer');
+  body.innerHTML = `<div class="form">${others.map((id, i) => `<button data-id="${id}">${names[i] || 'Carte'} · ${id}</button>`).join('')}</div>`;
+  body.onclick = e => { const b = e.target.closest('[data-id]'); if (b) { toggle('enter', false); enterMap(+b.dataset.id); } };
+  toggle('enter', true);
+}
+function openZaap() {
+  const body = makeWindow('zaap', 'Zaap');
+  body.innerHTML = `<div class="form" style="max-height:60vh;overflow:auto;min-width:300px">${zaaps.list.filter(z => z.mapId !== map.id)
+    .map(z => `<button data-id="${z.mapId}" style="text-align:left">${z.name} <small style="opacity:.7">[${z.pos}]</small></button>`).join('')}</div>`;
+  body.onclick = e => { const b = e.target.closest('[data-id]'); if (b) { toggle('zaap', false); enterMap(+b.dataset.id); } };
+  toggle('zaap', true);
+}
+// walk to the closest reachable walkable cell around the element's cell, then act
+function goTo(it, then) {
+  const [tx, ty] = cellXY(it[5] >= 0 ? it[5] : cellAt(it[1], it[2]));
+  const cells = map.cells.map((v, i) => i).filter(i => map.cells[i] & 1).sort((a, b) => { const [ax, ay] = cellXY(a), [bx, by] = cellXY(b); return Math.hypot(ax - tx, ay - ty) - Math.hypot(bx - tx, by - ty); });
+  for (const c of cells.slice(0, 30)) {
+    const p = c === hero.cell ? [] : findPath(hero.cell, c);
+    if (p.length || c === hero.cell) { hero.path = p; hero.run = p.length > 3; if (p.length) hero.action = then; else then(); return; }
+  }
+  chat('Impossible de s\'en approcher.', 'warn');
+}
+
 cv.addEventListener('mousemove', e => {
   if (!map) return;
   const [wx, wy] = toWorld(e), side = sideAt(wx, wy);
-  cv.style.cursor = side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
+  hovered = side < 0 ? interAt(wx, wy) : null;
+  cv.style.cursor = hovered ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
 });
 cv.addEventListener('click', e => {
   startAudio();
   if (!map || loading) return;
   const [wx, wy] = toWorld(e), c = cellAt(wx, wy);
-  hero.exitSide = -1;
+  hero.exitSide = -1; hero.action = null;
+  const it = sideAt(wx, wy) < 0 && interAt(wx, wy);
+  if (it) return goTo(it, () => interact(it));
   if (c >= 0) { hero.path = findPath(hero.cell, c); hero.run = hero.path.length > 3; return; }
   // click beyond an edge: walk to the closest reachable exit on that side, then change map
   const side = sideAt(wx, wy); if (side < 0) return;
@@ -247,7 +308,7 @@ function update(dt) {
   const step = (hero.run ? RUN : WALK) * W * 0.6 * dt;
   if (dist <= step) {
     hero.x = tx; hero.y = ty; hero.cell = next; hero.path.shift();
-    if (!hero.path.length) leave(next);
+    if (!hero.path.length) { const act = hero.action; hero.action = null; if (act) act(); else leave(next); }
   } else { hero.x += dx / dist * step; hero.y += dy / dist * step; }
 }
 function drawHero() {
@@ -255,8 +316,13 @@ function drawHero() {
   // stored directions 0,1,2,5,6; 3,4,7 are mirrors of 1,0,5
   const mirror = { 3: 1, 4: 0, 7: 5 }, d = mirror[hero.dir] ?? hero.dir, flip = hero.dir in mirror;
   const [rig, anim] = hero.moving ? [L.move, (hero.run ? 'AnimCourse_' : 'AnimMarche_') + d] : [L.idle, 'AnimStatiqueExplo0_' + d];
-  drawRig(gl, rig, L.skins, anim, Math.floor(hero.t * rig.fps), sx(hero.x), sy(hero.y), L.scale * cam.z, flip, L.cols);
+  drawRig(gl, rig, L.skins, anim, Math.floor(hero.t * rig.fps), sx(hero.x), sy(hero.y), L.scale * cam.z, flip, L.cols, undefined, L.hideHair);
   nameAt(sx(hero.x) / devicePixelRatio, (sy(hero.y) - 190 * L.scale * cam.z) / devicePixelRatio); // ~ head top
+}
+function highlight(it) { // hovered interactive: redraw it additively (glow)
+  const [g, x, y, scx, scy, , , anim] = it;
+  if (anim) { const r = rigs.get(g); if (r) drawRig(gl, r, [], r.def, Math.floor(time * r.fps), sx(x), sy(y), Math.abs(scx) * cam.z, scx < 0, undefined, [.5, .5, .5, .35]); beginSprites(); }
+  else { beginSprites(); gl.blendFunc(gl.ONE, gl.ONE); sprite([g, x, y, scx, scy, 0, 0x50ffffff], 0, 0); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
 }
 function drawAnimated(e) { // animated map element = rig playing its default animation in a loop
   const r = rigs.get(e[0]); if (!r) return;
@@ -265,7 +331,14 @@ function drawAnimated(e) { // animated map element = rig playing its default ani
 }
 function render() {
   // camera: fit the 14x40 cell area (plus a margin) and centre it
-  cam.x = X0 + 6.75 * W; cam.y = Y0 - 19.75 * H / 2; cam.z = Math.min(cv.width / 1500, cv.height / 1000);
+  // camera: fit the cell grid, zoom in until the screen is covered by the map art (no black borders on wide screens),
+  // but never crop the grid below ~760 px of height; then follow the hero vertically inside the art
+  const A = map.art, base = Math.min(cv.width / 1500, cv.height / 1000);
+  cam.z = Math.min(Math.max(base, cv.width / (A.x1 - A.x0), cv.height / (A.y1 - A.y0)), Math.max(base, cv.height / 700));
+  const vw = cv.width / cam.z, vh = cv.height / cam.z, clamp = (v, a, b) => a > b ? (a + b) / 2 : Math.min(Math.max(v, a), b);
+  cam.x = clamp(X0 + 6.75 * W, A.x0 + vw / 2, A.x1 - vw / 2);
+  const ty = clamp(clamp(hero.y, GRID.b + vh / 2 - H, GRID.t - vh / 2 + H), A.y0 + vh / 2, A.y1 - vh / 2);
+  camY = camY == null ? ty : camY + (ty - camY) * .08; cam.y = camY;
   const bg = map.bg >>> 0; gl.clearColor((bg >> 16 & 255) / 255, (bg >> 8 & 255) / 255, (bg & 255) / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   beginSprites(); map.back.forEach(group);
   let drawn = false;
@@ -275,6 +348,7 @@ function render() {
   }
   if (!drawn) { drawHero(); beginSprites(); }
   map.fore.forEach(group);
+  if (hovered) highlight(hovered);
   if (showGrid) drawGrid();
 }
 // option: cell grid (walkable = teal, exits = green), drawn with the sprite program as thin quads would be overkill: 2D overlay canvas
@@ -297,6 +371,7 @@ addEventListener('look', async () => { look = await buildLook(gl); });
 mapIndex = await fetch('maps/index.json' + BUST, { cache: 'no-store' }).then(r => r.json());
 await setupLook();
 setupWorldMap(() => map.id, mapIndex, id => { toggle('map', false); startAudio(); enterMap(id); });
+zaaps = await fetch('data/zaaps.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => zaaps);
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);
-window.game = { hero, get map() { return map; }, findPath, enterMap, cellXY, audio, startAudio };
+window.game = { hero, get map() { return map; }, findPath, enterMap, cellXY, audio, startAudio, sx, sy };
