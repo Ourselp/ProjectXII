@@ -13,7 +13,8 @@ node tools/extract/data.js "$S"                                           # tabl
 node tools/extract/fmod.js "$C/Audio/Banks/Desktop" extract/fmod_events.json   # sound events -> waveforms
 node --max-old-space-size=8000 tools/extract/maps_build.js              # all maps + sprites (+ list of animated elements, sounds)
 node tools/extract/anim_gfx.js                                            # animated map elements -> rig list
-node tools/extract/npcs.js                                                # NPCs placed through quest objectives + their dialogues (and rig list)
+node tools/extract/quests.js                                              # quests: givers, steps, objectives (texts, NPCs, maps)
+node tools/extract/npcs.js                                                # NPCs the quests place + their dialogues (and rig list)
 node --max-old-space-size=8000 tools/extract/rigs.js "$C"                # rigs (player, animated elements, monsters, NPCs) and all skins
 node tools/extract/monsters.js                                            # monsters per subarea
 [ -d extract/wm ] || { mkdir -p extract/wm_in; cp "$C/Picto/Worldmaps/worldmap_assets_.bundle" extract/wm_in/; $A extract/wm_in -m export -t tex2d $V -g none -f assetName_pathID -o extract/wm; $A extract/wm_in -m extract -o extract/raw_wm; }

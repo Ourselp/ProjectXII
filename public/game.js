@@ -3,8 +3,9 @@
 const V = new URL(import.meta.url).search;
 const { loadRig, loadSkin, drawRig, colorsOf, BUST } = await import('./rig.js' + V);
 const { setupLook, buildLook } = await import('./look.js' + V);
-const { setupHud, chat, nameAt, onCommand, toggle, makeWindow } = await import('./hud.js' + V);
+const { setupHud, chat, nameAt, onCommand, toggle, makeWindow, groupTip } = await import('./hud.js' + V);
 const { setupWorldMap } = await import('./worldmap.js' + V);
+const { loadQuests, npcsOn, start: startQuest, validate, visit, journal, questData, onQuestChange } = await import('./quests.js' + V);
 
 const cv = document.getElementById('c');
 const gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false });
@@ -64,7 +65,7 @@ function group(g) {
 // c colour animation [finalColor, freq], d dissolve alpha clip, w wind [bendStartY (cells), flexibility, multiplier]
 function sprite([g, x, y, scx, scy, rot, col], fx, i) {
   const T = tex.get(g); if (!T || !T.t) return;
-  const ph = (i * 2.399) % TAU; // per-element phase
+  const ph = ((x * 12.9898 + y * 78.233) * 43.7585) % TAU; // per-element phase from its position: lights / leaves out of sync
   let w = T.w * scx, h = T.h * scy;
   if (fx) {
     if (fx.t) { const k = fx.t[4] + fx.t[3] * Math.sin(TAU * fx.t[2] * time + ph); x += fx.t[0] * k; y += fx.t[1] * k; }
@@ -132,7 +133,8 @@ async function enterMap(id, cell) {
     A.gx0 = -1e5; A.gx1 = 1e5; // where the art really ends: measured on screen once drawn (measureGround)
     m.art = A; m.frames = 0; hovered = null; hero.action = null; camY = null;
     map = m;
-    monsters = []; npcs = []; spawnNpcs(m).then(() => spawnMonsters(m));
+    monsters = []; npcs = [];
+    loadQuests(BUST).then(() => { visit(m.id, mapIndex[m.id]?.[2]).forEach(x => chat(x, 'map')); return spawnNpcs(m); }).then(() => spawnMonsters(m));
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
     [hero.x, hero.y] = cellXY(cell); hero.cell = cell; hero.path = [];
     info.innerHTML = `<b>${m.name || '?'}</b><small>[${m.pos}] · carte ${m.id}</small>`;
@@ -246,9 +248,8 @@ cv.addEventListener('mousemove', e => {
   const hn = side < 0 ? npcAt(wx, wy) : null;
   hoveredMon = side < 0 && !hn ? monsterAt(wx, wy) : null;
   hovered = side < 0 && !hoveredMon ? interAt(wx, wy) : null;
-  monTip.hidden = !hoveredMon && !hn;
+  monTip.hidden = !hn; groupTip(hoveredMon, e); // monster groups: the client tooltip (hud.js)
   if (hn) { monTip.innerHTML = `<b>${hn.name}</b>`; monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
-  if (hoveredMon) { const g = hoveredMon; monTip.innerHTML = `<b>Groupe · niveau ${g.members.reduce((t, x) => t + x.lvl, 0)}</b>` + g.members.map(x => `<div>${x.name} <span style="opacity:.7">niv. ${x.lvl}</span></div>`).join(''); monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
   cv.style.cursor = hovered || hoveredMon || hn ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
 });
 cv.addEventListener('click', e => {
@@ -304,6 +305,15 @@ function teleport(v) {
   if (id) { toggle('map', false); enterMap(id); } else chat(`Aucune carte pour « ${v} »`, 'warn');
 }
 onCommand('tp', teleport);
+// quest journal: L or /quetes (the HUD's Quêtes window can reuse quests.js journal())
+function openJournal(force) {
+  const body = makeWindow('journal', 'Quêtes');
+  journal(body, { pos: id => mapIndex[id] && mapIndex[id].slice(0, 2).join(','), teleport: id => { toggle('journal', false); enterMap(id); }, chat });
+  toggle('journal', force);
+}
+onCommand('quetes', () => openJournal(true)); onCommand('quests', () => openJournal(true));
+addEventListener('keydown', e => { if ((e.key === 'l' || e.key === 'L') && !['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) openJournal(); });
+onQuestChange(() => { refreshNpcs(); const w = document.getElementById('win-journal'); if (w && !w.hidden) openJournal(true); });
 document.getElementById('go').addEventListener('submit', e => { e.preventDefault(); teleport(e.target.q.value); });
 
 // ---------- loop
@@ -367,36 +377,62 @@ function lookOf(key, [bone, skinIds, colors, scale]) {
   monLooks.set(key, p); return p;
 }
 
-// ---------- NPCs: the client links them to maps only (data/npcs.json, from quest objectives); each stands on a fixed
-// walkable cell near the middle of its map. Click = walk to them, then their dialogue (data/npc/<id>.json).
+// ---------- NPCs follow the quest progress (quests.js): givers stand on their quest's start map ("!" while a quest is
+// available), objective NPCs appear while that step is active ("?"). Each stands on a fixed walkable cell near the
+// middle of the map (the client has no cells). Click = walk to them, then their dialogue (data/npc/<id>.json).
 let NPC = null, npcs = [];
+const marks = new Map(); // npc -> DOM marker above its head
 async function spawnNpcs(m) {
   npcs = [];
   NPC ??= await fetch('data/npcs.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ maps: {}, npc: {} }));
-  const ids = NPC.maps[m.id] || []; if (!ids.length) return;
+  await loadQuests(BUST);
+  const here = npcsOn(m.id).filter(e => NPC.npc[e.npc]); if (!here.length) return;
   const [cx, cy] = cellXY(300), d = c => Math.hypot(cellXY(c)[0] - cx, cellXY(c)[1] - cy);
   const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell).sort((a, b) => d(a) - d(b)), list = [];
-  for (const id of ids) {
-    const rnd = rng(id * 31 + m.id), spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 2));
+  for (const e of here) {
+    const id = e.npc, rnd = rng(id * 31 + m.id), spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 2));
     const cell = spots[Math.floor(rnd() ** 2 * Math.min(spots.length, 60))]; if (cell == null) break;
     const [x, y] = cellXY(cell), [name, ...look] = NPC.npc[id];
-    list.push({ npc: id, name, cell, x, y, dir: [1, 3][Math.floor(rnd() * 2)], path: [], t: rnd() * 5, look: await lookOf('n' + id, look) });
+    list.push({ ...e, name, cell, x, y, dir: [1, 3][Math.floor(rnd() * 2)], path: [], t: rnd() * 5, look: await lookOf('n' + id, look) });
   }
   if (map === m) npcs = list.filter(n => n.look);
+}
+// refresh "!" / "?" (and who is there) after a quest change, keeping NPCs on their cells
+function refreshNpcs() {
+  if (!map) return;
+  const now = new Map(npcsOn(map.id).map(e => [e.npc, e]));
+  for (const n of npcs) Object.assign(n, now.get(n.npc) || { give: [], todo: [] });
+  if ([...now.keys()].some(id => NPC.npc[id] && !npcs.some(n => n.npc === id)) || npcs.some(n => !now.has(n.npc))) spawnNpcs(map);
+}
+function drawMarks() {
+  const k = 1 / devicePixelRatio, r = cv.getBoundingClientRect(), seen = new Set();
+  for (const n of npcs) {
+    const m = n.todo?.length ? '?' : n.give?.length ? '!' : ''; if (!m) continue; seen.add(n);
+    let el = marks.get(n);
+    if (!el) { el = document.createElement('div'); el.style.cssText = 'position:fixed;pointer-events:none;font:900 26px system-ui;color:#ffd84a;text-shadow:0 0 3px #000,0 0 8px #000;transform:translate(-50%,-100%)'; cv.after(el); marks.set(n, el); }
+    const [, b, , d4] = rigBox(n.look.idle);
+    el.textContent = m; el.style.left = r.left + sx(n.x) * k + 'px'; el.style.top = r.top + sy(n.y + d4 * n.look.scale + 12) * k + 'px';
+  }
+  for (const [n, el] of marks) if (!seen.has(n)) { el.remove(); marks.delete(n); }
 }
 async function talk(n) {
   const d = await fetch(`data/npc/${n.npc}.json${BUST}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ messages: [], replies: [], actions: [] }));
   const body = makeWindow('npc', n.name); let i = 0;
-  // the dialogue tree (which reply leads to which line) is server data: we show the lines in order, replies move on
+  // quests first: objectives to validate with this NPC, then quests it offers; then its lines (the dialogue tree itself
+  // is server data: lines are shown in order and replies move on)
   const show = () => {
-    body.innerHTML = `<div style="max-width:420px"><p style="margin:0 0 10px;line-height:1.45">${d.messages[i % Math.max(1, d.messages.length)] || '…'}</p>
-      <div class="form">${d.actions.map(a => `<button data-a="${a}">${a}</button>`).join('')}${d.replies.slice(0, 6).map((r, k) => `<button data-r="${k}" style="text-align:left">${r}</button>`).join('')}
+    const Q = questData(), todo = (n.todo || []).map(o => `<button data-v="${o}" style="text-align:left">✔ ${Q.o[o][3]}</button>`).join('');
+    const give = (n.give || []).map(q => `<button data-q="${q}" style="text-align:left">! Quête : ${Q.q[q][0]} <small>(niv. ${Q.q[q][2]})</small></button>`).join('');
+    body.innerHTML = `<div style="max-width:440px"><p style="margin:0 0 10px;line-height:1.45">${d.messages[i % Math.max(1, d.messages.length)] || '…'}</p>
+      <div class="form">${todo}${give}${d.actions.map(a => `<button data-a="${a}">${a}</button>`).join('')}${d.replies.slice(0, 6).map((r, k) => `<button data-r="${k}" style="text-align:left">${r}</button>`).join('')}
       <button data-bye>Au revoir</button></div></div>`;
   };
   body.onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.bye != null) return toggle('npc', false);
     if (b.dataset.a) return chat(`${b.dataset.a} : bientôt disponible.`, 'info');
+    if (b.dataset.q) { chat(`Nouvelle quête : ${startQuest(+b.dataset.q)}`, 'map'); refreshNpcs(); return show(); }
+    if (b.dataset.v) { const o = +b.dataset.v; chat(`Objectif accompli : ${questData().o[o][3]}`, 'info'); validate(o).forEach(m => chat(m, 'map')); refreshNpcs(); return show(); }
     i++; show();
   };
   show(); toggle('npc', true);
@@ -503,6 +539,7 @@ function render() {
   map.fore.forEach(group);
   if (hovered) highlight(hovered);
   if (showGrid) drawGrid();
+  drawMarks();
   if (++map.frames === 4) measureGround(); // once the map's textures are on screen
 }
 // where the map art really ends on each side: read 8 rendered rows and, from the centre outwards, find the first pixel

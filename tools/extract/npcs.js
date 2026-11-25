@@ -1,6 +1,6 @@
 // NPCs -> public/data/npcs.json and extract/npc_bones.json (rigs to export, read by rigs.js)
-// Where NPCs stand is server data; the client only links NPCs to maps through quest objectives ("Aller voir", "Ramener à",
-// "Montrer à", "Retourner voir", "Rapporter… à": parameter0 = NPC, mapId = map). No cell: the game picks one per map.
+// Where NPCs stand is server data; the client links NPCs to maps through quests: givers (startPosition) and objectives
+// (go see / bring / show / go back to / souls to). Needs public/data/quests.json (quests.js). No cell: the game picks one.
 // {maps: {mapId: [npcId]}, npc: {id: [name, bone, [skins], [colours], scale %]}} + public/data/npc/<id>.json {messages, replies, actions}
 const fs = require('fs');
 const T = f => JSON.parse(fs.readFileSync(`extract/data/${f}.json`)).objectsById.m_values;
@@ -14,10 +14,12 @@ function parseLook(l) { // "{bone|skin,skin|1=#rrggbb,2=123|scale|sub-entities�
   for (const c of cols.split(',').filter(Boolean)) { const [i, v] = c.split('='); if (v == null) continue; colors[+i - 1] = v.startsWith('#') ? parseInt(v.slice(1), 16) : +v; }
   return [+bone, skins.split(',').filter(Boolean).map(Number), colors, +scale.split(',')[0] || 100];
 }
+// every NPC the quests place (givers + objective NPCs, public/data/quests.json from quests.js); maps = all their spots
+const Q = JSON.parse(fs.readFileSync('public/data/quests.json'));
+const spots = [...Object.values(Q.q).flatMap(q => q[4]), ...Object.values(Q.o).filter(o => o[1] && o[2]).map(o => [o[2], o[1]])];
 const maps = {}, npc = {}, dialogs = {}, bones = new Set();
-for (const o of T('QuestObjectivesDataRoot')) {
-  if (![1, 2, 3, 9, 12].includes(o.typeId) || !idx[o.mapId]) continue;
-  const n = N[o.parameters.parameter0]; if (!n || !n.look) continue;
+for (const [mapId, npcId] of spots) {
+  const n = N[npcId]; if (!n || !n.look) continue;
   if (!npc[n.id]) {
     const [bone, skins, colors, scale] = parseLook(n.look);
     npc[n.id] = [txt[n.nameId] || `PNJ ${n.id}`, bone, skins, colors, scale];
@@ -27,7 +29,7 @@ for (const o of T('QuestObjectivesDataRoot')) {
       actions: n.actions.map(a => actions[a]).filter(Boolean) };
     if (bone !== 1) bones.add(String(bone));
   }
-  const list = maps[o.mapId] ??= []; if (!list.includes(n.id)) list.push(n.id);
+  const list = maps[mapId] ??= []; if (!list.includes(n.id)) list.push(n.id);
 }
 fs.mkdirSync('public/data', { recursive: true });
 fs.writeFileSync('public/data/npcs.json', JSON.stringify({ maps, npc }));
