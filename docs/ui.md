@@ -87,8 +87,11 @@ secondary stats, damages, resistances, XP, energy, guild / mount / honour progre
 
 **Monster group tooltip**: `groupTip(group, event)` (called from game.js on hover): `WorldRpMonstersGroupTooltip` + one
 `MonsterTooltipLine` per monster: "Niveau <sum>", XP for the hero (grade XP × (1 + Sagesse / 100)) and the group's base XP,
-archmonster / boss / bounty icons. Data: `monsters.json` `mon[id]` = `[name, bone, skins, colours, scale, minLvl, maxLvl,
-flags (1 archmonster, 2 boss), [[level, xp] per grade], family]` (tools/extract/monsters.js).
+archmonster / boss / bounty icons. Data: `monsters.json` (tools/extract/monsters.js): `mon[id]` = `[name, bone, skins, colours, scale,
+minLvl, maxLvl, flags (1 archmonster, 2 boss, 4 drawable: its rig exists), [[level, xp] per grade], family]` for **every** monster
+(5 135: bestiary, tooltips); `sub` = wandering monsters per subarea; `bossRoom` = {last room map id of a dungeon: [boss ids]}
+(game.js puts the boss there with 2-6 of the dungeon's monsters, the boss leads the group); `archi` = {monster: its archmonster}
+(game.js swaps one in 1 time in 40); `bounty`, `dungeon` as before.
 
 ## Known gaps (next steps)
 

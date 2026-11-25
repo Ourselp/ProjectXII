@@ -517,7 +517,7 @@ async function spawnMonsters(m) {
   const place = members => {
     const spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 3)); if (!spots.length) return;
     const cell = spots[Math.floor(rnd() * spots.length)], [x, y] = cellXY(cell);
-    members.sort((p, q) => q.lvl - p.lvl);
+    members.sort((p, q) => ((MON.mon[q.id]?.[7] & 2) - (MON.mon[p.id]?.[7] & 2)) || q.lvl - p.lvl); // a boss leads its group, else the highest level
     list.push({ members, id: members[0].id, cell, x, y, dir: [1, 3, 5, 7][Math.floor(rnd() * 4)], path: [], t: rnd() * 5, wait: 2 + rnd() * 8, rnd });
   };
   const between = (a, b) => a + Math.floor(rnd() * (b - a + 1));

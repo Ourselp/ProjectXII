@@ -24,16 +24,17 @@ const isBounty = m => m.isBounty || /recherche/i.test(races[m.race] || '');
 const mon = {}, sub = {}, bounty = {}, dungeon = [];
 fs.mkdirSync('public/ui/monsters', { recursive: true });
 const all = {}; T('MonstersDataRoot').forEach(m => all[m.id] = m);
-const keep = m => {
-  const [bone, skins, colors, scale] = parseLook(m.look);
-  if (bone !== 1 && !rigs.has(String(bone))) return false;
-  const lv = m.grades.map(g => g.level);
+// every monster goes in mon (bestiary, tooltips); keep() = it can also be drawn (its rig exists): only those spawn
+const add = m => {
+  const [bone, skins, colors, scale] = parseLook(m.look), drawable = bone === 1 || rigs.has(String(bone)), lv = m.grades.map(g => g.level);
+  if (!lv.length) return false;
   mon[m.id] ??= [txt[m.nameId] || `Monstre ${m.id}`, bone, skins, colors, scale, Math.min(...lv), Math.max(...lv),
-    (miniBoss.has(m.id) ? 1 : 0) | (m.m_flags & 4 ? 2 : 0), m.grades.map(g => [g.level, g.xp]), races[m.race] || '']; // flags: 1 archmonster, 2 boss; [level, xp] per grade (tooltip, bestiary); family
+    (miniBoss.has(m.id) ? 1 : 0) | (m.m_flags & 4 ? 2 : 0) | (drawable ? 4 : 0), m.grades.map(g => [g.level, g.xp]), races[m.race] || '']; // flags: 1 archmonster, 2 boss, 4 drawable; [level, xp] per grade; family
   const pic = `extract/mon_picto/Sprite/${m.gfxId}.png`; // portrait (Picto/Monsters, by gfxId) -> public/ui/monsters/<id>.png
   if (fs.existsSync(pic)) fs.copyFileSync(pic, `public/ui/monsters/${m.id}.png`);
-  return true;
+  return drawable;
 };
+const keep = add;
 for (const s of T('SubAreasDataRoot')) {
   const ids = s.monsters.filter(id => all[id] && !special(all[id]) && keep(all[id]));
   const b = s.monsters.filter(id => all[id] && isBounty(all[id]) && keep(all[id]));
@@ -41,6 +42,13 @@ for (const s of T('SubAreasDataRoot')) {
   if (b.length) bounty[s.id] = b;
   if (s.dungeonId >= 0) dungeon.push(s.id);
 }
+// dungeons: the last room (mapIds order) holds the boss(es), escorted by the dungeon's monsters (game.js)
+const bossRoom = {};
+for (const d of T('DungeonsDataRoot')) { const b = (d.bosses || []).filter(id => all[id] && keep(all[id])); if (b.length && d.mapIds?.length) bossRoom[d.mapIds[d.mapIds.length - 1]] = b; }
+// archmonsters: a normal monster's rare variant (correspondingMiniBossId); the game sometimes swaps one in
+const archi = {};
+for (const m of Object.values(all)) if (mon[m.id] && m.correspondingMiniBossId > 0 && all[m.correspondingMiniBossId] && keep(all[m.correspondingMiniBossId])) archi[m.id] = m.correspondingMiniBossId;
+for (const m of Object.values(all)) add(m); // the rest, for the bestiary
 fs.mkdirSync('public/data', { recursive: true });
-fs.writeFileSync('public/data/monsters.json', JSON.stringify({ sub, mon, bounty, dungeon }));
-console.log(Object.keys(mon).length, 'monsters in', Object.keys(sub).length, 'subareas,', Object.keys(bounty).length, 'with bounties,', dungeon.length, 'dungeon subareas');
+fs.writeFileSync('public/data/monsters.json', JSON.stringify({ sub, mon, bounty, dungeon, bossRoom, archi }));
+console.log(Object.keys(bossRoom).length, 'boss rooms,', Object.keys(archi).length, 'archmonsters,', Object.keys(mon).length, 'monsters in', Object.keys(sub).length, 'subareas,', Object.keys(bounty).length, 'with bounties,', dungeon.length, 'dungeon subareas');
