@@ -24,14 +24,26 @@ const prog = (() => {
       // wind: x offset growing above the bend start (quad space, y down: -0.5 = top)
       float h = clamp((wind.x - a.y) / (wind.x + .5), 0., 1.); a.x += sin(time * 1.6 + wind.z) * wind.y * h * h;
       vec3 w = m * vec3(a, 1.); gl_Position = vec4(w.xy / res * vec2(2.,-2.) + vec2(-1.,1.), 0., 1.); uv = q + .5; }`));
-  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `precision mediump float; uniform sampler2D t; uniform vec4 tint; varying vec2 uv;
-    void main(){ vec4 c = texture2D(t, uv); c.rgb *= tint.rgb * c.a; c *= tint.a; gl_FragColor = c; }`));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `precision mediump float; uniform sampler2D t; uniform vec4 tint; uniform float feather; varying vec2 uv;
+    void main(){ vec4 c = texture2D(t, uv);
+      if (feather > 0.) { vec2 e = min(uv, 1. - uv); c.a *= smoothstep(0., feather, e.x) * smoothstep(0., feather, e.y); } // soft edges for ramp overlays
+      c.rgb *= tint.rgb * c.a; c *= tint.a; gl_FragColor = c; }`));
   gl.linkProgram(p); return p;
 })();
 const quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-.5, -.5, .5, -.5, -.5, .5, .5, .5]), gl.STATIC_DRAW);
-const U = {}; for (const n of ['m', 'res', 'tint', 'wind', 'time']) U[n] = gl.getUniformLocation(prog, n);
+const U = {}; for (const n of ['m', 'res', 'tint', 'wind', 'time', 'feather']) U[n] = gl.getUniformLocation(prog, n);
 
+// "ramp" overlays: big single-colour textures whose alpha runs from one side to the other (shading / light gradients).
+// The client blends their borders away; drawn as plain quads they show hard rectangular edges, so we feather them.
+const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+function isRamp(img) {
+  if (img.width < 400 && img.height < 400) return false;
+  probe.canvas.width = probe.canvas.height = 8; probe.clearRect(0, 0, 8, 8); probe.drawImage(img, 0, 0, 8, 8);
+  const d = probe.getImageData(0, 0, 8, 8).data; let lo = 255, hi = 0;
+  for (let i = 0; i < d.length; i += 4) { if (Math.abs(d[i] - d[0]) > 8 || Math.abs(d[i + 1] - d[1]) > 8 || Math.abs(d[i + 2] - d[2]) > 8) return false; lo = Math.min(lo, d[i + 3]); hi = Math.max(hi, d[i + 3]); }
+  return hi - lo > 120;
+}
 const tex = new Map();  // gfxId -> Promise<{t, w, h} | null>, then the resolved value
 function loadTex(g) {
   if (tex.has(g)) return tex.get(g);
@@ -39,7 +51,7 @@ function loadTex(g) {
     const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    r({ t, w: img.width, h: img.height }); }; img.src = `gfx/${g}.png${BUST}`; });
+    r({ t, w: img.width, h: img.height, ramp: isRamp(img) }); }; img.src = `gfx/${g}.png${BUST}`; });
   tex.set(g, p); return p;
 }
 
@@ -63,7 +75,10 @@ function group(g) {
 }
 // fx (see maps_build.js): r rotation [cx, cy, freq, amp°, offset°], s scale [ax, ay, freq, amp], t translation [dx, dy, freq, amp, offset],
 // c colour animation [finalColor, freq], d dissolve alpha clip, w wind [bendStartY (cells), flexibility, multiplier]
+// debug: ?hide=123,456 skips those sprites, ?hide=back / mid / fore / anim skips a layer
+const HIDE = new Set((new URLSearchParams(location.search).get('hide') || '').split(',').filter(Boolean).map(v => isNaN(v) ? v : +v));
 function sprite([g, x, y, scx, scy, rot, col], fx, i) {
+  if (HIDE.has(g)) return;
   const T = tex.get(g); if (!T || !T.t) return;
   const ph = ((x * 12.9898 + y * 78.233) * 43.7585) % TAU; // per-element phase from its position: lights / leaves out of sync
   let w = T.w * scx, h = T.h * scy;
@@ -82,6 +97,7 @@ function sprite([g, x, y, scx, scy, rot, col], fx, i) {
   w *= z; h *= z;
   gl.uniformMatrix3fv(U.m, false, [cs * w, sn * w, 0, -sn * h, cs * h, 0, sx(x), sy(y), 1]);
   gl.uniform4f(U.tint, (col >> 16 & 255) / 128, (col >> 8 & 255) / 128, (col & 255) / 128, (col >>> 24) / 255);
+  gl.uniform1f(U.feather, T.ramp ? .3 : 0);
   gl.bindTexture(gl.TEXTURE_2D, T.t); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   if (fx && fx.w) gl.uniform3f(U.wind, 0, 0, 0);
 }
@@ -130,6 +146,8 @@ async function enterMap(id, cell) {
       const w = T.w * Math.abs(scx) / 2, h = T.h * Math.abs(scy) / 2;
       A.x0 = Math.min(A.x0, x - w); A.x1 = Math.max(A.x1, x + w); A.y0 = Math.min(A.y0, y - h); A.y1 = Math.max(A.y1, y + h);
     }
+    // each static interactive -> its real element (rotation, group effects) for the hover glow
+    for (const it of m.inter) if (!it[7]) for (const g of [...m.back, ...m.mid, ...m.fore]) { const k = g[3].findIndex(e => e[0] === it[0] && e[1] === it[1] && e[2] === it[2]); if (k >= 0) { it.ref = [g[3][k], g[2], k]; break; } }
     A.gx0 = -1e5; A.gx1 = 1e5; // where the art really ends: measured on screen once drawn (measureGround)
     m.art = A; m.frames = 0; hovered = null; hero.action = null; camY = null;
     map = m;
@@ -187,13 +205,15 @@ const CURSOR = [arrow(0), arrow(180), arrow(270), arrow(90)];
 // ---------- interactive elements (zaap, doors, resources…): hover highlight, click = walk next to it then act
 // Which element is what is server data: zaaps are recognised by their sprite (data/zaaps.json, tools/extract/zaaps.js);
 // any other element leads to the maps sharing these coordinates (interiors / exits), if there are some.
-let hovered = null, camY = null, lastDoor = null, zaaps = { gfx: [], list: [] };
-function rigBox(r) { // bounds of the rig's default animation, first frame (rig units, y up)
+let AREA = null, hovered = null, camY = null, lastDoor = null, zaaps = { gfx: [], list: [] };
+function rigBox(r) { // bounds of the rig's default animation over its frames (rig units, y up), at least 50 x 50 around the origin
   if (r.box) return r.box;
-  const b = [1e9, 1e9, -1e9, -1e9];
-  for (const [n, a, bb, tx, c, d, ty] of (r.anims[r.def] || Object.values(r.anims)[0] || [])[0] || []) { const p = r.parts[r.nodes[n]]; if (!p) continue;
-    for (let k = 0; k < p.v.length; k += 5) { const X = a * p.v[k] + bb * p.v[k + 1] + tx, Y = c * p.v[k] + d * p.v[k + 1] + ty; b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y); } }
-  return r.box = b[0] < 1e9 ? b : [-40, 0, 40, 100];
+  const b = [1e9, 1e9, -1e9, -1e9], frames = r.anims[r.def] || Object.values(r.anims)[0] || [];
+  for (let f = 0; f < frames.length; f += Math.max(1, Math.floor(frames.length / 12)))
+    for (const [n, a, bb, tx, c, d, ty] of frames[f]) { const p = r.parts[r.nodes[n]]; if (!p) continue;
+      for (let k = 0; k < p.v.length; k += 5) { const X = a * p.v[k] + bb * p.v[k + 1] + tx, Y = c * p.v[k] + d * p.v[k + 1] + ty; b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y); } }
+  if (b[0] > b[2]) return r.box = [-40, 0, 40, 100];
+  return r.box = [Math.min(b[0], -25), Math.min(b[1], 0), Math.max(b[2], 25), Math.max(b[3], 50)];
 }
 function interAt(wx, wy) {
   let best = null, area = 1e12;
@@ -208,15 +228,21 @@ function interAt(wx, wy) {
 }
 async function interact(it) {
   if (zaaps.gfx.includes(it[0])) return openZaap();
-  if (it[7]) return chat('Ressource : la récolte arrive bientôt.', 'info'); // animated interactives are harvestables (wheat, trees, ore…)
-  // doors: where a door leads is server data. Outside, a building's interior is a map with the same coordinates and subarea
-  // but no world map (worldMap -1); inside, the way out is the outdoor map at these coordinates (back to the door used).
-  const [x, y, sub, world] = mapIndex[map.id], at = Object.entries(mapIndex).filter(([id, p]) => +id !== map.id && p[0] === x && p[1] === y);
-  let others = world !== -1 ? at.filter(([, p]) => p[2] === sub && p[3] === -1) : at.filter(([, p]) => p[3] !== -1);
-  if (world === -1 && others.length > 1) others = others.filter(([, p]) => p[2] === sub).length ? others.filter(([, p]) => p[2] === sub) : others;
+  // harvestables (wheat, trees, ore, mushrooms…) are rigs with growth / harvested states; other interactives (sparkles
+  // by sewer pipes, doors…) are tried as map transitions
+  if (it[7] && rigs.get(it[0])?.anims.AnimState1_0) return chat('Ressource : la récolte arrive bientôt.', 'info');
+  // doors, ladders, pipes…: where they lead is server data. Destinations are maps at the same coordinates in the same AREA
+  // (a house's interior, the sewers under a street, the street above a sewer). Never another area (Incarnam ≠ Cania).
+  // From outside: the building's interior first (same subarea, no world map); from inside: back to the door used.
+  AREA ??= await fetch('data/subareas.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
+  const [x, y, sub, world] = mapIndex[map.id], area = AREA[sub];
+  const at = Object.entries(mapIndex).filter(([id, p]) => +id !== map.id && p[0] === x && p[1] === y && AREA[p[2]] === area);
+  let others = world !== -1 ? at.filter(([, p]) => p[2] === sub && p[3] === -1) : [];
+  if (!others.length && lastDoor && at.some(([id]) => +id === lastDoor.map)) others = at.filter(([id]) => +id === lastDoor.map);
+  if (!others.length) others = at.filter(([, p]) => p[2] === sub).length ? at.filter(([, p]) => p[2] === sub) : at;
   others = others.map(([id]) => +id);
   if (!others.length) return chat(world === -1 ? 'Pas de sortie par ici.' : 'Rien à faire ici pour l\'instant.', 'warn');
-  const go = id => { if (world !== -1) lastDoor = { map: map.id, cell: it[5] }; enterMap(id, lastDoor && lastDoor.map === id ? lastDoor.cell : null); };
+  const go = id => { const back = lastDoor && lastDoor.map === id ? lastDoor.cell : null; lastDoor = { map: map.id, cell: it[5] }; enterMap(id, back); };
   if (others.length === 1) return go(others[0]);
   const names = await Promise.all(others.map(id => fetch(`maps/${id}.json${BUST}`, { cache: 'no-store' }).then(r => r.json()).then(m => m.name).catch(() => '')));
   const body = makeWindow('enter', 'Entrer');
@@ -258,7 +284,8 @@ cv.addEventListener('click', e => {
   const [wx, wy] = toWorld(e), c = cellAt(wx, wy);
   hero.exitSide = -1; hero.action = null;
   const np = sideAt(wx, wy) < 0 && npcAt(wx, wy);
-  if (np) return goTo([0, np.x, np.y, 1, 1, np.cell], () => { const [x0, r0] = toXR(hero.cell), [x1, r1] = toXR(np.cell); const dd = DIRS.findIndex(([a, b]) => Math.sign(a) === Math.sign(x1 - x0) && Math.sign(b) === Math.sign(r1 - r0)); if (dd >= 0) hero.dir = dd; talk(np); });
+  if (np) return talk(np); // like the game: talk from anywhere, no need to walk up
+  if (talking) closeTalk();
   const mo = sideAt(wx, wy) < 0 && monsterAt(wx, wy);
   if (mo) return chat(`Groupe de ${mo.members.length} monstre${mo.members.length > 1 ? 's' : ''} (niveau ${mo.members.reduce((t, x) => t + x.lvl, 0)}) : les combats arrivent bientôt.`, 'info');
   const it = sideAt(wx, wy) < 0 && interAt(wx, wy);
@@ -352,7 +379,9 @@ function drawHero() {
 function highlight(it) { // hovered interactive: redraw it additively (glow)
   const [g, x, y, scx, scy, , , anim] = it;
   if (anim) { const r = rigs.get(g); if (r) drawRig(gl, r, [], r.def, Math.floor(time * r.fps), sx(x), sy(y), Math.abs(scx) * cam.z, scx < 0, undefined, [.5, .5, .5, .35]); beginSprites(); }
-  else { beginSprites(); gl.blendFunc(gl.ONE, gl.ONE); sprite([g, x, y, scx, scy, 0, 0x50ffffff], 0, 0); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
+  else { // same element, same rotation / animation, drawn again additively
+    const [e, fx, k] = it.ref || [[g, x, y, scx, scy, 0], 0, 0];
+    beginSprites(); gl.blendFunc(gl.ONE, gl.ONE); sprite([...e.slice(0, 6), 0x40ffffff], fx && { ...fx, c: 0, d: 0 }, k); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); }
 }
 function drawAnimated(e) { // animated map element = rig playing its default animation in a loop
   const r = rigs.get(e[0]); if (!r) return;
@@ -415,27 +444,50 @@ function drawMarks() {
   }
   for (const [n, el] of marks) if (!seen.has(n)) { el.remove(); marks.delete(n); }
 }
+// dialogue: opens at once, from any distance, as a speech bubble above the NPC with the choices underneath
+// (own design). Quests first (objectives to validate, quests offered), then the NPC's actions and replies; the dialogue tree
+// itself is server data, so lines are shown in order and replies move on.
+const bubble = document.createElement('div');
+bubble.hidden = true; bubble.style.cssText = 'position:fixed;z-index:60;width:340px;transform:translate(-50%,-100%);font-size:13px';
+const choices = document.createElement('div'); choices.hidden = true; choices.style.cssText = 'position:fixed;z-index:60;width:300px;transform:translateY(-50%);font-size:13px';
+cv.after(bubble, choices);
+let talking = null;
+const closeTalk = () => { bubble.hidden = choices.hidden = true; talking = null; };
+addEventListener('keydown', e => { if (e.key === 'Escape') closeTalk(); });
 async function talk(n) {
   const d = await fetch(`data/npc/${n.npc}.json${BUST}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ messages: [], replies: [], actions: [] }));
-  const body = makeWindow('npc', n.name); let i = 0;
-  // quests first: objectives to validate with this NPC, then quests it offers; then its lines (the dialogue tree itself
-  // is server data: lines are shown in order and replies move on)
+  let i = 0; talking = n;
+  const opt = (attr, text) => `<button ${attr} style="display:block;width:100%;text-align:left;margin-top:3px;padding:4px 8px;border-radius:6px;border:1px solid #fff3;background:#1d2329e6;color:#eee;cursor:pointer">${text}</button>`;
   const show = () => {
-    const Q = questData(), todo = (n.todo || []).map(o => `<button data-v="${o}" style="text-align:left">✔ ${Q.o[o][3]}</button>`).join('');
-    const give = (n.give || []).map(q => `<button data-q="${q}" style="text-align:left">! Quête : ${Q.q[q][0]} <small>(niv. ${Q.q[q][2]})</small></button>`).join('');
-    body.innerHTML = `<div style="max-width:440px"><p style="margin:0 0 10px;line-height:1.45">${d.messages[i % Math.max(1, d.messages.length)] || '…'}</p>
-      <div class="form">${todo}${give}${d.actions.map(a => `<button data-a="${a}">${a}</button>`).join('')}${d.replies.slice(0, 6).map((r, k) => `<button data-r="${k}" style="text-align:left">${r}</button>`).join('')}
-      <button data-bye>Au revoir</button></div></div>`;
+    const Q = questData(), todo = (n.todo || []).map(o => opt(`data-v="${o}"`, `<b style="color:#ffd84a">?</b> ${Q.o[o][3]}`)).join('');
+    const give = (n.give || []).map(q => opt(`data-q="${q}"`, `<b style="color:#ffd84a">!</b> ${Q.q[q][0]} <small style="opacity:.7">niv. ${Q.q[q][2]}</small>`)).join('');
+    choices.innerHTML = `${todo}${give}${d.actions.map(a => opt(`data-a="${a}"`, a)).join('')}${d.replies.slice(0, 6).map((r, k) => opt(`data-r="${k}"`, r)).join('')}${opt('data-bye', 'Au revoir')}`;
+    bubble.innerHTML = `<div style="position:relative;background:#fbf6e9;color:#2b2418;border-radius:12px;padding:8px 12px;box-shadow:0 3px 10px #0008;line-height:1.4">
+        <b style="display:block;margin-bottom:2px;color:#7a4b12">${n.name}</b>${d.messages[i % Math.max(1, d.messages.length)] || '…'}
+        <span style="position:absolute;left:50%;bottom:-9px;margin-left:-9px;border:9px solid transparent;border-bottom:0;border-top-color:#fbf6e9"></span></div>`;
   };
-  body.onclick = e => {
-    const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.bye != null) return toggle('npc', false);
+  choices.onclick = e => {
+    e.stopPropagation(); const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.bye != null) return closeTalk();
     if (b.dataset.a) return chat(`${b.dataset.a} : bientôt disponible.`, 'info');
     if (b.dataset.q) { chat(`Nouvelle quête : ${startQuest(+b.dataset.q)}`, 'map'); refreshNpcs(); return show(); }
     if (b.dataset.v) { const o = +b.dataset.v; chat(`Objectif accompli : ${questData().o[o][3]}`, 'info'); validate(o).forEach(m => chat(m, 'map')); refreshNpcs(); return show(); }
     i++; show();
   };
-  show(); toggle('npc', true);
+  show(); bubble.hidden = choices.hidden = false; placeBubble();
+}
+// keep the bubble above the NPC's head (called every frame); choices hang below the bubble, so the whole block sits above
+function placeBubble() {
+  if (!talking || bubble.hidden) return;
+  if (!npcs.includes(talking)) return closeTalk();
+  const k = 1 / devicePixelRatio, r = cv.getBoundingClientRect(), [, , , top] = rigBox(talking.look.idle);
+  const x = r.left + sx(talking.x) * k, y = r.top + sy(talking.y + top * talking.look.scale + 30) * k;
+  bubble.style.left = Math.min(innerWidth - 180, Math.max(180, x)) + 'px';
+  bubble.style.top = Math.max(bubble.offsetHeight + 8, y) + 'px';
+  // choices beside the NPC (right side, or left when close to the right edge), centred on its body
+  const mid = r.top + sy(talking.y + top * talking.look.scale / 2) * k, right = x + 185 + 300 < innerWidth;
+  choices.style.left = (right ? x + 185 : x - 485) + 'px'; // clear of the 340 px bubble centred on x
+  choices.style.top = Math.min(innerHeight - choices.offsetHeight / 2 - 8, Math.max(choices.offsetHeight / 2 + 8, mid)) + 'px';
 }
 function npcAt(wx, wy) {
   return npcs.find(n => { const [a, b, c, d] = rigBox(n.look.idle), s = n.look.scale; return wx >= n.x + a * s && wx <= n.x + c * s && wy >= n.y + b * s && wy <= n.y + d * s; }) || null;
@@ -526,20 +578,20 @@ function render() {
   cam.x = (GRID.l + GRID.r) / 2; cam.y = (GRID.t + GRID.b) / 2;
   edgeFade();
   const bg = map.bg >>> 0; gl.clearColor((bg >> 16 & 255) / 255, (bg >> 8 & 255) / 255, (bg & 255) / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-  beginSprites(); map.back.forEach(group);
+  beginSprites(); if (!HIDE.has('back')) map.back.forEach(group);
   // actors (hero + monsters) are drawn before the first middleground group of a later cell
   const actors = [hero, ...npcs, ...monsters].sort((a, b) => a.cell - b.cell);
   const drawActor = a => { if (a === hero) drawHero(); else drawMonster(a); beginSprites(); };
   let k = 0;
   for (const g of map.depth) {
     while (k < actors.length && actors[k].cell < g[0]) drawActor(actors[k++]);
-    if (g[4]) { drawAnimated(g[3][0]); beginSprites(); } else group(g);
+    if (g[4]) { if (!HIDE.has('anim')) { drawAnimated(g[3][0]); beginSprites(); } } else if (!HIDE.has('mid')) group(g);
   }
   while (k < actors.length) drawActor(actors[k++]);
-  map.fore.forEach(group);
+  if (!HIDE.has('fore')) map.fore.forEach(group);
   if (hovered) highlight(hovered);
   if (showGrid) drawGrid();
-  drawMarks();
+  drawMarks(); placeBubble();
   if (++map.frames === 4) measureGround(); // once the map's textures are on screen
 }
 // where the map art really ends on each side: read 8 rendered rows and, from the centre outwards, find the first pixel
@@ -582,4 +634,4 @@ setupWorldMap(() => map.id, mapIndex, id => { toggle('map', false); startAudio()
 zaaps = await fetch('data/zaaps.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => zaaps);
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);
-window.game = { hero, get map() { return map; }, get monsters() { return monsters; }, get npcs() { return npcs; }, findPath, enterMap, cellXY, audio, startAudio, sx, sy };
+window.game = { hero, get map() { return map; }, get monsters() { return monsters; }, get npcs() { return npcs; }, interAt, interact, toWorld, findPath, enterMap, cellXY, audio, startAudio, sx, sy };

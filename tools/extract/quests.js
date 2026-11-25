@@ -39,5 +39,7 @@ for (const x of T('QuestsDataRoot')) {
 }
 fs.mkdirSync('public/data', { recursive: true });
 fs.writeFileSync('public/data/quests.json', JSON.stringify({ q, s, o }));
+// subarea -> area (map transitions through doors / pipes stay inside an area)
+fs.writeFileSync('public/data/subareas.json', JSON.stringify(Object.fromEntries(T('SubAreasDataRoot').map(x => [x.id, x.areaId]))));
 const placed = Object.values(o).filter(x => x[1] && x[2]).length;
 console.log(Object.keys(q).length, 'quests,', Object.keys(s).length, 'steps,', Object.keys(o).length, 'objectives (', placed, 'with an NPC on a map)');
