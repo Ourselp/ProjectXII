@@ -1,6 +1,7 @@
 // Dofus 3 world walk-around: WebGL map renderer (all maps) + skinned character, click to move, map changes, music.
 import { loadRig, drawRig } from './rig.js';
 import { setupLook, look } from './look.js';
+import { setupHud, setClass, chat, nameAt } from './hud.js';
 
 const cv = document.getElementById('c');
 const gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false });
@@ -98,13 +99,13 @@ muteBtn.onclick = () => { audio.muted = !audio.muted; localStorage.muted = audio
 muteLabel();
 
 // ---------- map
-let map, mapIndex, hero, loading = false;
+let map, mapIndex, hero, loading = false, map0;
 const rigs = new Map(); // animated map elements: gfxId -> rig
 async function enterMap(id, cell) {
   if (loading) return; loading = true;
   info.textContent = 'Chargement…';
   try {
-    const m = await (await fetch(`maps/${id}.json`)).json();
+    const m = await (await fetch(`maps/${id}.json`, { cache: 'no-cache' })).json();
     const used = [...m.back, ...m.mid, ...m.fore].flatMap(g => g[3]).map(e => e[0]);
     await Promise.all([...used.map(loadTex), ...m.anim.map(async e => { if (!rigs.has(e[0])) rigs.set(e[0], await loadRig(gl, e[0])); })]);
     for (const g of used) tex.set(g, await tex.get(g));
@@ -116,7 +117,8 @@ async function enterMap(id, cell) {
     map = m;
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
     [hero.x, hero.y] = cellXY(cell); hero.cell = cell; hero.path = [];
-    info.textContent = `${m.name || '?'} [${m.pos}] · ${m.id}`;
+    info.innerHTML = `<b>${m.name || '?'}</b> [${m.pos}]`; info.title = `carte ${m.id}`;
+    if (map0 !== m.id) chat(`${m.name || 'Carte'} [${m.pos}]`, 'map'); map0 = m.id;
     history.replaceState(null, '', `?map=${m.id}&cell=${cell}`);
     playLayer('music', m.music); playLayer('amb', m.amb);
   } catch (e) { info.textContent = `Carte ${id} introuvable`; console.error(e); }
@@ -144,29 +146,60 @@ function findPath(from, to) {
 }
 
 // ---------- input
-function cellAt(px, py) {
-  const wx = (px - cv.width / 2) / cam.z + cam.x, wy = cam.y - (py - cv.height / 2) / cam.z;
+const toWorld = e => { const r = cv.getBoundingClientRect(), px = (e.clientX - r.left) * devicePixelRatio, py = (e.clientY - r.top) * devicePixelRatio;
+  return [(px - cv.width / 2) / cam.z + cam.x, cam.y - (py - cv.height / 2) / cam.z]; };
+function cellAt(wx, wy) {
   let best = -1, bd = 1e9;
   for (let i = 0; i < 560; i++) { const [x, y] = cellXY(i), d = Math.abs(wx - x) / W + Math.abs(wy - y) / H; if (d < bd) { bd = d; best = i; } }
   return bd <= 0.5 ? best : -1;
 }
+// outside the cell grid: which side (0 top, 1 bottom, 2 left, 3 right) the point is beyond, or -1
+const GRID = { l: X0 - W / 2, r: X0 + 13.5 * W + W / 2, t: Y0 + H / 2, b: Y0 - 39 * H / 2 - H / 2 };
+function sideAt(wx, wy) {
+  const over = [wy - GRID.t, GRID.b - wy, GRID.l - wx, wx - GRID.r];
+  const m = Math.max(...over); return m > 0 ? over.indexOf(m) : -1;
+}
+// exits on a side: edge cells whose map-change bits point that way and whose neighbour exists
+const sideExits = side => map.nb[side] > 0 && mapIndex[map.nb[side]] ? map.cells.map((v, i) => i).filter(i => (map.cells[i] & 1) && exitSides(i).includes(side)) : [];
+const CURSOR = ['n-resize', 's-resize', 'w-resize', 'e-resize'];
+cv.addEventListener('mousemove', e => {
+  if (!map) return;
+  const [wx, wy] = toWorld(e), side = sideAt(wx, wy);
+  cv.style.cursor = side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
+});
 cv.addEventListener('click', e => {
   startAudio();
-  const r = cv.getBoundingClientRect(), c = cellAt((e.clientX - r.left) * devicePixelRatio, (e.clientY - r.top) * devicePixelRatio);
-  if (c < 0 || !map || loading) return;
-  hero.path = findPath(hero.cell, c); hero.run = hero.path.length > 3;
+  if (!map || loading) return;
+  const [wx, wy] = toWorld(e), c = cellAt(wx, wy);
+  hero.exitSide = -1;
+  if (c >= 0) { hero.path = findPath(hero.cell, c); hero.run = hero.path.length > 3; return; }
+  // click beyond an edge: walk to the closest reachable exit on that side, then change map
+  const side = sideAt(wx, wy); if (side < 0) return;
+  const exits = sideExits(side).sort((a, b) => { const [ax, ay] = cellXY(a), [bx, by] = cellXY(b); return Math.hypot(ax - wx, ay - wy) - Math.hypot(bx - wx, by - wy); });
+  for (const x of exits) {
+    const p = x === hero.cell ? [] : findPath(hero.cell, x);
+    if (p.length || x === hero.cell) { hero.exitSide = side; hero.path = p; hero.run = p.length > 3; if (!p.length) leave(x); return; }
+  }
+  chat(exits.length ? 'Impossible d\'atteindre la sortie de ce côté.' : 'Pas de sortie de ce côté.', 'warn');
 });
 
 // leaving the map: an edge cell with map-change data takes the neighbour on that side (top, bottom, left, right)
-function edgeExit(c) {
-  if (!(map.cells[c] & 2)) return null;
-  // mapChangeData = direction bits (1 E, 2 SE, 4 S, 8 SW, 16 W, 32 NW, 64 N, 128 NE)
-  const [x, r] = toXR(c), b = map.cells[c] >> 8, opts = [];
-  if (b & 64 || (r <= 1 && b & 160)) opts.push([0, c + 532]);    // top    -> appear at the bottom
-  if (b & 4 || (r >= 38 && b & 10)) opts.push([1, c - 532]);     // bottom -> top
-  if (b & 16 || (x <= 1 && b & 40)) opts.push([2, c + 13]);      // left   -> right
-  if (b & 1 || (x >= 26 && b & 130)) opts.push([3, c - 13]);     // right  -> left
-  return opts.find(([side]) => map.nb[side] > 0 && mapIndex[map.nb[side]]) || null;
+// mapChangeData = direction bits (1 E, 2 SE, 4 S, 8 SW, 16 W, 32 NW, 64 N, 128 NE)
+function exitSides(c) {
+  if (!(map.cells[c] & 2)) return [];
+  const [x, r] = toXR(c), b = map.cells[c] >> 8, s = [];
+  if (b & 64 || (r <= 1 && b & 160)) s.push(0);
+  if (b & 4 || (r >= 38 && b & 10)) s.push(1);
+  if (b & 16 || (x <= 1 && b & 40)) s.push(2);
+  if (b & 1 || (x >= 26 && b & 130)) s.push(3);
+  return s;
+}
+const ARRIVE = [c => c + 532, c => c - 532, c => c + 13, c => c - 13]; // appear on the opposite side
+function leave(c) {
+  const sides = exitSides(c).filter(s => map.nb[s] > 0 && mapIndex[map.nb[s]]);
+  const side = sides.includes(hero.exitSide) ? hero.exitSide : sides[0];
+  hero.exitSide = -1;
+  if (side != null) enterMap(map.nb[side], ARRIVE[side](c));
 }
 
 // teleport box: "x,y" (world coordinates, main world preferred) or a map id
@@ -202,7 +235,7 @@ function update(dt) {
   const step = (hero.run ? RUN : WALK) * W * 0.6 * dt;
   if (dist <= step) {
     hero.x = tx; hero.y = ty; hero.cell = next; hero.path.shift();
-    if (!hero.path.length) { const ex = edgeExit(next); if (ex) enterMap(map.nb[ex[0]], ex[1]); }
+    if (!hero.path.length) leave(next);
   } else { hero.x += dx / dist * step; hero.y += dy / dist * step; }
 }
 function drawHero() {
@@ -211,6 +244,7 @@ function drawHero() {
   const mirror = { 3: 1, 4: 0, 7: 5 }, d = mirror[hero.dir] ?? hero.dir, flip = hero.dir in mirror;
   const [rig, anim] = hero.moving ? [L.move, (hero.run ? 'AnimCourse_' : 'AnimMarche_') + d] : [L.idle, 'AnimStatiqueExplo0_' + d];
   drawRig(gl, rig, L.skins, anim, Math.floor(hero.t * rig.fps), sx(hero.x), sy(hero.y), L.scale * cam.z, flip, L.cols);
+  nameAt(sx(hero.x) / devicePixelRatio, (sy(hero.y) - 190 * L.scale * cam.z) / devicePixelRatio); // ~ head top
 }
 function drawAnimated(e) { // animated map element = rig playing its default animation in a loop
   const r = rigs.get(e[0]); if (!r) return;
@@ -233,7 +267,10 @@ function render() {
 
 hero = { x: 0, y: 0, cell: 0, dir: 1, t: 0, path: [], moving: false, run: false };
 const q = new URLSearchParams(location.search);
-[mapIndex] = await Promise.all([fetch('maps/index.json').then(r => r.json()), setupLook(gl)]);
+await setupHud();
+addEventListener('look', e => setClass(e.detail.breed, e.detail.gender));
+[mapIndex] = await Promise.all([fetch('maps/index.json', { cache: 'no-cache' }).then(r => r.json()), setupLook(gl)]);
+document.getElementById('say').addEventListener('submit', e => { e.preventDefault(); const t = e.target.t.value.trim(); if (t) chat(`Chabou : ${t}`); e.target.t.value = ''; });
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);
 window.game = { hero, get map() { return map; }, findPath, enterMap, cellXY, audio, startAudio };

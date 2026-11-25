@@ -39,6 +39,7 @@ Tools to download into `tools/bin/` (git-ignored):
 | `audio.js` | music/ambience of every map → `public/audio/*.ogg` + `index.json` (event → files) |
 | `anim_gfx.js`, `rigs.js` | animated map elements + player rigs → `public/rigs/`, all skins → `public/skins/` |
 | `looks.js` | character creator data → `public/data/looks.json` |
+| `ui.js` | HUD: class spells (name, icon `Picto/Spells` `sort_<iconId>`, AP, range, description) → `public/data/spells.json`, portraits `Head_<bodySkin>` → `public/ui/` |
 
 ## Formats worked out
 

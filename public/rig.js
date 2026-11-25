@@ -22,7 +22,7 @@ function texture(gl, url) {
   cache.set(url, p); return p;
 }
 const json = new Map();
-const getJson = url => json.get(url) || (json.set(url, fetch(url).then(r => r.ok ? r.json() : null).catch(() => null)), json.get(url));
+const getJson = url => json.get(url) || (json.set(url, fetch(url, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)), json.get(url));
 
 // rig: public/rigs/<name>.json ; skin: public/skins/<id>.json — both resolve to {parts, gltex} (null if missing)
 export async function loadRig(gl, name) {

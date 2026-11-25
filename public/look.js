@@ -8,7 +8,7 @@ const hex = n => '#' + (n >>> 0).toString(16).padStart(6, '0').slice(-6);
 
 export const look = () => cur;
 export async function setupLook(g) {
-  gl = g; D = await fetch('data/looks.json').then(r => r.json());
+  gl = g; D = await fetch('data/looks.json', { cache: 'no-cache' }).then(r => r.json());
   state = { breed: 8, gender: 0, head: 0, colors: null, hat: '', cape: '', shield: '', wings: '', ...JSON.parse(localStorage.look || '{}'), ...JSON.parse(new URLSearchParams(location.search).get('look') || '{}') };
   const el = document.getElementById('look'), sel = (k, opts) => `<label>${k[0]}<select data-k="${k[1]}">${opts}</select></label>`;
   const render = () => {
@@ -35,6 +35,7 @@ export async function setupLook(g) {
 
 async function apply() {
   localStorage.look = JSON.stringify(state);
+  dispatchEvent(new CustomEvent('look', { detail: state }));
   const b = D.breeds.find(x => x.id === state.breed) || D.breeds[0], L = b.looks[state.gender];
   const head = (D.heads[`${b.id}_${state.gender}`] || [])[state.head];
   const ids = [head?.skin, ...Object.keys(SLOTS).map(s => state[s]), L.skin].filter(Boolean);
