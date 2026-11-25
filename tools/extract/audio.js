@@ -2,7 +2,7 @@
 // index: eventGuid -> [files] (all play together, looped). Needs extract/fmod_events.json (fmod.js), vgmstream-cli and ffmpeg.
 // FMOD events are parameter-driven; we don't evaluate parameters, we pick waveforms by name:
 //   music: one stem group (names minus the "Stem N" suffix), the one with the most stems;
-//   ambience: every layer except interior / close variants.
+//   ambience: up to 2 steady beds ("Statique", "Hub", loops), no interior / close / weather / one-shot layers.
 const fs = require('fs'), { execFileSync } = require('child_process');
 const [bankDir] = process.argv.slice(2), VG = 'tools/bin/vgmstream/vgmstream-cli.exe';
 const events = JSON.parse(fs.readFileSync('extract/fmod_events.json')), used = JSON.parse(fs.readFileSync('extract/map_sounds.json'));
@@ -13,7 +13,10 @@ function pick(ws) {
     const groups = {}; for (const w of ws) (groups[w.name.replace(/_?st(e)?m_?\d.*$/i, '')] ??= []).push(w);
     return Object.values(groups).sort((a, b) => b.length - a.length)[0];
   }
-  const out = ws.filter(w => !/interi|close/i.test(w.name)); return out.length ? out : ws.slice(0, 1);
+  // ambience: the steady beds only (weather, one-shots and textures are triggered by game parameters), at most 2
+  const ok = ws.filter(w => !/interi|close|layers|particles|texture|rain|pluie|thunder|orage|blizzard|stinger|oneshot|random/i.test(w.name));
+  const beds = ok.filter(w => /statique|static|hub|_lp|loop/i.test(w.name));
+  return (beds.length ? beds : ok.length ? ok : ws).slice(0, 2);
 }
 fs.mkdirSync('public/audio', { recursive: true });
 const index = {}, todo = new Map();

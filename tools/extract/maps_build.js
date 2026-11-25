@@ -26,11 +26,16 @@ function fx(params) {
   }
   return Object.keys(o).length ? o : 0;
 }
+// staging targets belong to scripted states: those of a sequence with _ON/_OFF variants are events (hidden by default),
+// the others (e.g. T_ZAAP for the ZAAP sequence) are the normal look and stay visible
+const norm = s => s.toLowerCase().replace(/^(t|ptc)_/, '').replace(/[^a-z0-9]/g, '');
+function eventStates(m) { return [...new Set((m.stagingSequences || []).filter(q => /_(on|off)$/i.test(q.id)).map(q => norm(q.id.replace(/_(on|off)$/i, ''))))]; }
 function groups(m, L) {
-  const sd = m[L + 'MaterialData'].shaderData;
+  const sd = m[L + 'MaterialData'].shaderData, events = eventStates(m);
   return m[L + 'MapElements'].flatMap(g => {
     const p = (sd[g.materialIndex] || {}).shaderParameters || [];
-    if (g.isStagingTarget || p.some(x => x.$type === 'ShaderRefractionParameters')) return []; // event-driven / needs screen texture
+    if (g.isStagingTarget && (!g.stagingId || events.some(e => norm(g.stagingId).startsWith(e)))) return [];
+    if (p.some(x => x.$type === 'ShaderRefractionParameters')) return []; // needs the screen texture
     const b = p.find(x => x.$type === 'ShaderBlendingParameters');
     return [[g.cellId ?? -1, b ? [b.sourceFactor, b.destinationFactor] : 0, fx(p), g.mapElements.map(el)]];
   });

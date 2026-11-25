@@ -1,7 +1,7 @@
 // Dofus 3 world walk-around: WebGL map renderer (all maps) + skinned character, click to move, map changes, music.
 // modules are imported with the same ?v= as this file (index.html adds a fresh one per load: no caching for now)
 const V = new URL(import.meta.url).search;
-const { loadRig, drawRig, BUST } = await import('./rig.js' + V);
+const { loadRig, loadSkin, drawRig, colorsOf, BUST } = await import('./rig.js' + V);
 const { setupLook, buildLook } = await import('./look.js' + V);
 const { setupHud, chat, nameAt, onCommand, toggle, makeWindow } = await import('./hud.js' + V);
 const { setupWorldMap } = await import('./worldmap.js' + V);
@@ -131,6 +131,7 @@ async function enterMap(id, cell) {
     }
     m.art = A; hovered = null; hero.action = null; camY = null;
     map = m;
+    monsters = []; spawnMonsters(m);
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
     [hero.x, hero.y] = cellXY(cell); hero.cell = cell; hero.path = [];
     info.innerHTML = `<b>${m.name || '?'}</b><small>[${m.pos}] · carte ${m.id}</small>`;
@@ -187,7 +188,7 @@ let hovered = null, camY = null, zaaps = { gfx: [], list: [] };
 function rigBox(r) { // bounds of the rig's default animation, first frame (rig units, y up)
   if (r.box) return r.box;
   const b = [1e9, 1e9, -1e9, -1e9];
-  for (const [n, a, bb, tx, c, d, ty] of (r.anims[r.def] || [])[0] || []) { const p = r.parts[r.nodes[n]]; if (!p) continue;
+  for (const [n, a, bb, tx, c, d, ty] of (r.anims[r.def] || Object.values(r.anims)[0] || [])[0] || []) { const p = r.parts[r.nodes[n]]; if (!p) continue;
     for (let k = 0; k < p.v.length; k += 5) { const X = a * p.v[k] + bb * p.v[k + 1] + tx, Y = c * p.v[k] + d * p.v[k + 1] + ty; b[0] = Math.min(b[0], X); b[1] = Math.min(b[1], Y); b[2] = Math.max(b[2], X); b[3] = Math.max(b[3], Y); } }
   return r.box = b[0] < 1e9 ? b : [-40, 0, 40, 100];
 }
@@ -233,14 +234,19 @@ function goTo(it, then) {
 cv.addEventListener('mousemove', e => {
   if (!map) return;
   const [wx, wy] = toWorld(e), side = sideAt(wx, wy);
-  hovered = side < 0 ? interAt(wx, wy) : null;
-  cv.style.cursor = hovered ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
+  hoveredMon = side < 0 ? monsterAt(wx, wy) : null;
+  hovered = side < 0 && !hoveredMon ? interAt(wx, wy) : null;
+  monTip.hidden = !hoveredMon;
+  if (hoveredMon) { monTip.innerHTML = `<b>${hoveredMon.name}</b> · niveau ${hoveredMon.lvl}`; monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
+  cv.style.cursor = hovered || hoveredMon ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
 });
 cv.addEventListener('click', e => {
   startAudio();
   if (!map || loading) return;
   const [wx, wy] = toWorld(e), c = cellAt(wx, wy);
   hero.exitSide = -1; hero.action = null;
+  const mo = sideAt(wx, wy) < 0 && monsterAt(wx, wy);
+  if (mo) return chat(`${mo.name} (niveau ${mo.lvl}) : les combats arrivent bientôt.`, 'info');
   const it = sideAt(wx, wy) < 0 && interAt(wx, wy);
   if (it) return goTo(it, () => interact(it));
   if (c >= 0) { hero.path = findPath(hero.cell, c); hero.run = hero.path.length > 3; return; }
@@ -300,6 +306,7 @@ function frame(now) {
 function update(dt) {
   hero.t += dt;
   if (loading) return;
+  updateMonsters(dt);
   if (!hero.path.length) { if (hero.moving) { hero.moving = false; hero.t = 0; } return; }
   if (!hero.moving) { hero.moving = true; hero.t = 0; }
   const next = hero.path[0], [tx, ty] = cellXY(next), dx = tx - hero.x, dy = ty - hero.y, dist = Math.hypot(dx, dy);
@@ -329,24 +336,97 @@ function drawAnimated(e) { // animated map element = rig playing its default ani
   const col = e[6] >>> 0, tint = [(col >> 16 & 255) / 128, (col >> 8 & 255) / 128, (col & 255) / 128, (col >>> 24) / 255];
   drawRig(gl, r, [], r.def, Math.floor(time * r.fps), sx(e[1]), sy(e[2]), Math.abs(e[3]) * cam.z, e[3] < 0, undefined, tint);
 }
+// ---------- monsters: groups of the subarea's monsters (data/monsters.json) on walkable cells, idling and wandering.
+// Spawn positions are server data in the game; here they are seeded by the map id (same layout on every visit).
+let MON = null, monsters = [], hoveredMon = null;
+const monLooks = new Map();
+async function monLook(id) {
+  if (monLooks.has(id)) return monLooks.get(id);
+  const [, bone, skinIds, colors, scale] = MON.mon[id];
+  const p = (async () => {
+    const skins = (await Promise.all(skinIds.map(s => loadSkin(gl, s)))).filter(Boolean);
+    const base = { skins, cols: colorsOf(colors), scale: scale / 100 };
+    if (bone === 1) { const [move, idle] = await Promise.all([loadRig(gl, '1-movement'), loadRig(gl, '1-static')]); return move && idle && { ...base, move, idle, walk: 'AnimMarche', still: 'AnimStatiqueExplo0', scale: base.scale * .55 }; }
+    const r = await loadRig(gl, bone); return r && { ...base, move: r, idle: r, walk: 'AnimMarche', still: 'AnimStatique' };
+  })();
+  monLooks.set(id, p); return p;
+}
+// animation name for a direction: stored directions vary per rig; 3, 4, 7 can be mirrors of 1, 0, 5
+function animFor(rig, base, dir) {
+  if (rig.anims[`${base}_${dir}`]) return [`${base}_${dir}`, false];
+  const m = { 3: 1, 4: 0, 7: 5, 1: 3, 0: 4, 5: 7 }[dir];
+  if (m != null && rig.anims[`${base}_${m}`]) return [`${base}_${m}`, true];
+  const any = Object.keys(rig.anims).find(a => a.startsWith(base + '_')) || Object.keys(rig.anims)[0];
+  return [any, false];
+}
+async function spawnMonsters(m) {
+  monsters = []; hoveredMon = null;
+  MON ??= await fetch('data/monsters.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ sub: {}, mon: {} }));
+  const ids = MON.sub[mapIndex[m.id]?.[2]] || []; if (!ids.length) return;
+  let seed = (m.id % 2147483646) + 1; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+  const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell);
+  const list = [];
+  for (let g = 0, n = 1 + Math.floor(rnd() * 3); g < n && free.length; g++) {
+    const c0 = free[Math.floor(rnd() * free.length)], [cx, cy] = cellXY(c0);
+    const near = free.filter(c => !list.some(x => x.cell === c)).sort((a, b) => { const [ax, ay] = cellXY(a), [bx, by] = cellXY(b); return Math.hypot(ax - cx, ay - cy) - Math.hypot(bx - cx, by - cy); });
+    for (let k = 0, size = 1 + Math.floor(rnd() * 4); k < size && near[k * 2]; k++) {
+      const id = ids[Math.floor(rnd() * ids.length)], [name, , , , , lo, hi] = MON.mon[id], cell = near[k * 2], [x, y] = cellXY(cell);
+      list.push({ id, name, lvl: lo + Math.floor(rnd() * (hi - lo + 1)), cell, x, y, dir: [1, 3, 5, 7][Math.floor(rnd() * 4)], path: [], t: rnd() * 5, wait: 2 + rnd() * 8, rnd });
+    }
+  }
+  await Promise.all(list.map(async mo => { mo.look = await monLook(mo.id); }));
+  if (map === m) monsters = list.filter(mo => mo.look);
+}
+function updateMonsters(dt) {
+  for (const mo of monsters) {
+    mo.t += dt;
+    if (!mo.path.length) {
+      if ((mo.wait -= dt) > 0) continue;
+      mo.wait = 4 + mo.rnd() * 8;
+      const [cx, cy] = cellXY(mo.cell), opts = map.cells.map((v, i) => i).filter(i => (map.cells[i] & 3) === 1 && Math.hypot(cellXY(i)[0] - cx, cellXY(i)[1] - cy) < W * 2.5 && !monsters.some(o => o !== mo && o.cell === i));
+      const to = opts[Math.floor(mo.rnd() * opts.length)]; if (to == null) continue;
+      mo.path = findPath(mo.cell, to).slice(0, 5); mo.t = 0; continue;
+    }
+    const next = mo.path[0], [tx, ty] = cellXY(next), dx = tx - mo.x, dy = ty - mo.y, dist = Math.hypot(dx, dy);
+    const [x0, r0] = toXR(mo.cell), [x1, r1] = toXR(next), d = DIRS.findIndex(([a, b]) => a === x1 - x0 && b === r1 - r0); if (d >= 0) mo.dir = d;
+    const step = WALK * .8 * W * .6 * dt;
+    if (dist <= step) { mo.x = tx; mo.y = ty; mo.cell = next; mo.path.shift(); if (!mo.path.length) mo.t = 0; }
+    else { mo.x += dx / dist * step; mo.y += dy / dist * step; }
+  }
+}
+function drawMonster(mo) {
+  const L = mo.look, moving = mo.path.length > 0, rig = moving ? L.move : L.idle;
+  const [anim, flip] = animFor(rig, moving ? L.walk : L.still, mo.dir);
+  drawRig(gl, rig, L.skins, anim, Math.floor(mo.t * rig.fps), sx(mo.x), sy(mo.y), L.scale * cam.z, flip, L.cols);
+}
+function monsterAt(wx, wy) {
+  return monsters.find(mo => { const [a, b, c, d] = rigBox(mo.look.idle), s = mo.look.scale; return wx >= mo.x + a * s && wx <= mo.x + c * s && wy >= mo.y + b * s && wy <= mo.y + d * s; }) || null;
+}
+const monTip = Object.assign(document.createElement('div'), { className: 'panel', hidden: true });
+monTip.style.cssText = 'position:fixed;padding:4px 8px;pointer-events:none;z-index:40;font-size:12px'; document.body.append(monTip);
+
 function render() {
-  // camera: fit the 14x40 cell area (plus a margin) and centre it
-  // camera: fit the cell grid, zoom in until the screen is covered by the map art (no black borders on wide screens),
-  // but never crop the grid below ~760 px of height; then follow the hero vertically inside the art
-  const A = map.art, base = Math.min(cv.width / 1500, cv.height / 1000);
-  cam.z = Math.min(Math.max(base, cv.width / (A.x1 - A.x0), cv.height / (A.y1 - A.y0)), Math.max(base, cv.height / 700));
+  // camera: show the grid's full height, zoom further only if the screen is wider than the map art (whose edges are
+  // jagged / black), then follow the hero vertically. Art bounds are trimmed 4 %: trees overhang the ground edge.
+  const A = map.art, tw = (A.x1 - A.x0) * .04;
+  const M = { x0: Math.max(A.x0 + tw, GRID.l - 4 * W), x1: Math.min(A.x1 - tw, GRID.r + 4 * W), y0: GRID.b - H, y1: GRID.t + H };
+  M.x0 = Math.min(M.x0, GRID.l); M.x1 = Math.max(M.x1, GRID.r);
+  cam.z = Math.max(cv.width / (M.x1 - M.x0), cv.height / (M.y1 - M.y0));
   const vw = cv.width / cam.z, vh = cv.height / cam.z, clamp = (v, a, b) => a > b ? (a + b) / 2 : Math.min(Math.max(v, a), b);
-  cam.x = clamp(X0 + 6.75 * W, A.x0 + vw / 2, A.x1 - vw / 2);
-  const ty = clamp(clamp(hero.y, GRID.b + vh / 2 - H, GRID.t - vh / 2 + H), A.y0 + vh / 2, A.y1 - vh / 2);
+  cam.x = clamp(X0 + 6.75 * W, M.x0 + vw / 2, M.x1 - vw / 2);
+  const ty = clamp(hero.y, M.y0 + vh / 2, M.y1 - vh / 2);
   camY = camY == null ? ty : camY + (ty - camY) * .08; cam.y = camY;
   const bg = map.bg >>> 0; gl.clearColor((bg >> 16 & 255) / 255, (bg >> 8 & 255) / 255, (bg & 255) / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   beginSprites(); map.back.forEach(group);
-  let drawn = false;
+  // actors (hero + monsters) are drawn before the first middleground group of a later cell
+  const actors = [hero, ...monsters].sort((a, b) => a.cell - b.cell);
+  const drawActor = a => { if (a === hero) drawHero(); else drawMonster(a); beginSprites(); };
+  let k = 0;
   for (const g of map.depth) {
-    if (!drawn && g[0] > hero.cell) { drawHero(); beginSprites(); drawn = true; }
+    while (k < actors.length && actors[k].cell < g[0]) drawActor(actors[k++]);
     if (g[4]) { drawAnimated(g[3][0]); beginSprites(); } else group(g);
   }
-  if (!drawn) { drawHero(); beginSprites(); }
+  while (k < actors.length) drawActor(actors[k++]);
   map.fore.forEach(group);
   if (hovered) highlight(hovered);
   if (showGrid) drawGrid();

@@ -59,13 +59,23 @@ function skinParts(s) {
   return parts;
 }
 
-// ---- unpack + export textures (once)
+// ---- unpack + export textures (incremental: only bundles not unpacked yet)
 const run = (...a) => execFileSync(AS, a, { stdio: 'ignore', maxBuffer: 1 << 30 });
-fs.mkdirSync('extract/rig_in', { recursive: true });
-const bones = ['1-movement', '1-static', ...JSON.parse(fs.readFileSync('extract/anim_gfx.json')).map(String)];
-for (const b of bones) { const f = `${C}/Characters/Bones/bones_assets_bone_${b}.bundle`; if (fs.existsSync(f) && !fs.existsSync(`extract/rig_in/${path.basename(f)}`)) fs.copyFileSync(f, `extract/rig_in/${path.basename(f)}`); }
-if (!fs.existsSync('extract/raw_rigs')) run('extract/rig_in', '-m', 'extract', '-o', 'extract/raw_rigs');
-if (!fs.existsSync('extract/rig_tex')) run('extract/rig_in', '-m', 'export', '-t', 'tex2d', ...V, '-g', 'none', '-o', 'extract/rig_tex');
+// monsters living in subareas: look "{bone|skins|colours|scale}"; bone 1 = player-like look (player rigs + skins)
+const T = f => JSON.parse(fs.readFileSync(`extract/data/${f}.json`)).objectsById.m_values;
+const monsterIds = new Set(T('SubAreasDataRoot').flatMap(s => s.monsters));
+const monsterBones = new Set(T('MonstersDataRoot').filter(m => monsterIds.has(m.id)).map(m => m.look.match(/^\{(\d+)/)?.[1]).filter(b => b && b !== '1'));
+const bones = ['1-movement', '1-static', ...JSON.parse(fs.readFileSync('extract/anim_gfx.json')).map(String), ...monsterBones];
+fs.mkdirSync('extract/raw_rigs', { recursive: true });
+const fresh = bones.map(b => `bones_assets_bone_${b}.bundle`).filter(f => fs.existsSync(`${C}/Characters/Bones/${f}`) && !fs.existsSync(`extract/raw_rigs/${f}_unpacked`));
+if (fresh.length) {
+  fs.rmSync('extract/rig_new', { recursive: true, force: true }); fs.mkdirSync('extract/rig_new');
+  for (const f of fresh) fs.copyFileSync(`${C}/Characters/Bones/${f}`, `extract/rig_new/${f}`);
+  run('extract/rig_new', '-m', 'extract', '-o', 'extract/raw_rigs');
+  run('extract/rig_new', '-m', 'export', '-t', 'tex2d', ...V, '-g', 'none', '-o', 'extract/rig_tex');
+  fs.rmSync('extract/rig_new', { recursive: true, force: true });
+  console.log(fresh.length, 'new rig bundles unpacked');
+}
 if (!fs.existsSync('extract/raw_skins')) run(`${C}/Characters/Skins`, '-m', 'extract', '-o', 'extract/raw_skins');
 if (!fs.existsSync('extract/skin_tex')) run(`${C}/Characters/Skins`, '-m', 'export', '-t', 'tex2d', ...V, '-g', 'none', '-o', 'extract/skin_tex');
 
@@ -87,6 +97,7 @@ for (const d of fs.readdirSync('extract/raw_rigs')) {
   const anims = {};
   for (const a of def.animations) if (byPath[a.data.m_PathID]) {
     if (name.startsWith('1-') && !/^Anim(Marche|Course|NageMarche|NageCourse|StatiqueExplo0)_\d$/.test(a.name)) continue; // player: only what the game uses
+    if (monsterBones.has(name) && !/^Anim(Statique|Marche|Course)_\d$/.test(a.name)) continue;                // monsters: idle / walk / run
     try { anims[a.name] = parseAnim(byPath[a.data.m_PathID], def.exposedNodeNames.length); } catch (e) { console.warn('anim', name, a.name, e.message.slice(0, 60)); fs.writeFileSync('extract/bad_anim.bin', byPath[a.data.m_PathID]); }
   }
   const out = { nodes: [...def.exposedNodeNames, ...def.graphics.map(g => g.part.name)], anims, fps: def.defaultFrameRate || 30, def: def.defaultAnimationName || Object.keys(anims)[0] || '',
@@ -94,6 +105,7 @@ for (const d of fs.readdirSync('extract/raw_rigs')) {
   fs.writeFileSync(`public/rigs/${name}.json`, JSON.stringify(out)); nr++;
 }
 const slots = {}; // skin id -> part name prefixes, to group skins by equipment slot
+if (process.env.SKINS === '0' && fs.existsSync('public/skins/index.json')) { console.log(nr, 'rigs (skins skipped)'); process.exit(0); }
 for (const d of fs.readdirSync('extract/raw_skins')) {
   const id = d.replace('skins_assets_skin_', '').replace('.bundle_unpacked', '');
   let objs; try { objs = load(`extract/raw_skins/${d}`); } catch (e) { console.warn(id, e.message); continue; }
