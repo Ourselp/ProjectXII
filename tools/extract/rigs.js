@@ -65,7 +65,9 @@ const run = (...a) => execFileSync(AS, a, { stdio: 'ignore', maxBuffer: 1 << 30 
 const T = f => JSON.parse(fs.readFileSync(`extract/data/${f}.json`)).objectsById.m_values;
 const monsterIds = new Set(T('SubAreasDataRoot').flatMap(s => s.monsters));
 const monsterBones = new Set(T('MonstersDataRoot').filter(m => monsterIds.has(m.id)).map(m => m.look.match(/^\{(\d+)/)?.[1]).filter(b => b && b !== '1'));
-const bones = ['1-movement', '1-static', ...JSON.parse(fs.readFileSync('extract/anim_gfx.json')).map(String), ...monsterBones];
+// NPCs placed on maps (tools/extract/npcs.js, run before)
+const npcBones = new Set(fs.existsSync('extract/npc_bones.json') ? JSON.parse(fs.readFileSync('extract/npc_bones.json')) : []);
+const bones = ['1-movement', '1-static', ...JSON.parse(fs.readFileSync('extract/anim_gfx.json')).map(String), ...monsterBones, ...npcBones];
 fs.mkdirSync('extract/raw_rigs', { recursive: true });
 const fresh = bones.map(b => `bones_assets_bone_${b}.bundle`).filter(f => fs.existsSync(`${C}/Characters/Bones/${f}`) && !fs.existsSync(`extract/raw_rigs/${f}_unpacked`));
 if (fresh.length) {
@@ -98,6 +100,7 @@ for (const d of fs.readdirSync('extract/raw_rigs')) {
   for (const a of def.animations) if (byPath[a.data.m_PathID]) {
     if (name.startsWith('1-') && !/^Anim(Marche|Course|NageMarche|NageCourse|StatiqueExplo0)_\d$/.test(a.name)) continue; // player: only what the game uses
     if (monsterBones.has(name) && !/^Anim(Statique|Marche|Course)_\d$/.test(a.name)) continue;                // monsters: idle / walk / run
+    if (npcBones.has(name) && !monsterBones.has(name) && !/^AnimStatique(_\d)?$/.test(a.name) && a.name !== def.defaultAnimationName) continue; // NPCs: idle
     try { anims[a.name] = parseAnim(byPath[a.data.m_PathID], def.exposedNodeNames.length); } catch (e) { console.warn('anim', name, a.name, e.message.slice(0, 60)); fs.writeFileSync('extract/bad_anim.bin', byPath[a.data.m_PathID]); }
   }
   const out = { nodes: [...def.exposedNodeNames, ...def.graphics.map(g => g.part.name)], anims, fps: def.defaultFrameRate || 30, def: def.defaultAnimationName || Object.keys(anims)[0] || '',

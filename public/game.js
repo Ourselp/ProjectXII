@@ -132,7 +132,7 @@ async function enterMap(id, cell) {
     A.gx0 = -1e5; A.gx1 = 1e5; // where the art really ends: measured on screen once drawn (measureGround)
     m.art = A; m.frames = 0; hovered = null; hero.action = null; camY = null;
     map = m;
-    monsters = []; spawnMonsters(m);
+    monsters = []; npcs = []; spawnNpcs(m).then(() => spawnMonsters(m));
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
     [hero.x, hero.y] = cellXY(cell); hero.cell = cell; hero.path = [];
     info.innerHTML = `<b>${m.name || '?'}</b><small>[${m.pos}] · carte ${m.id}</small>`;
@@ -232,7 +232,7 @@ function openZaap() {
 // walk to the closest reachable walkable cell around the element's cell, then act
 function goTo(it, then) {
   const [tx, ty] = cellXY(it[5] >= 0 ? it[5] : cellAt(it[1], it[2]));
-  const cells = map.cells.map((v, i) => i).filter(i => map.cells[i] & 1).sort((a, b) => { const [ax, ay] = cellXY(a), [bx, by] = cellXY(b); return Math.hypot(ax - tx, ay - ty) - Math.hypot(bx - tx, by - ty); });
+  const cells = map.cells.map((v, i) => i).filter(i => map.cells[i] & 1 && i !== it[5]).sort((a, b) => { const [ax, ay] = cellXY(a), [bx, by] = cellXY(b); return Math.hypot(ax - tx, ay - ty) - Math.hypot(bx - tx, by - ty); });
   for (const c of cells.slice(0, 30)) {
     const p = c === hero.cell ? [] : findPath(hero.cell, c);
     if (p.length || c === hero.cell) { hero.path = p; hero.run = p.length > 3; if (p.length) hero.action = then; else then(); return; }
@@ -243,17 +243,21 @@ function goTo(it, then) {
 cv.addEventListener('mousemove', e => {
   if (!map) return;
   const [wx, wy] = toWorld(e), side = sideAt(wx, wy);
-  hoveredMon = side < 0 ? monsterAt(wx, wy) : null;
+  const hn = side < 0 ? npcAt(wx, wy) : null;
+  hoveredMon = side < 0 && !hn ? monsterAt(wx, wy) : null;
   hovered = side < 0 && !hoveredMon ? interAt(wx, wy) : null;
-  monTip.hidden = !hoveredMon;
+  monTip.hidden = !hoveredMon && !hn;
+  if (hn) { monTip.innerHTML = `<b>${hn.name}</b>`; monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
   if (hoveredMon) { const g = hoveredMon; monTip.innerHTML = `<b>Groupe · niveau ${g.members.reduce((t, x) => t + x.lvl, 0)}</b>` + g.members.map(x => `<div>${x.name} <span style="opacity:.7">niv. ${x.lvl}</span></div>`).join(''); monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
-  cv.style.cursor = hovered || hoveredMon ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
+  cv.style.cursor = hovered || hoveredMon || hn ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
 });
 cv.addEventListener('click', e => {
   startAudio();
   if (!map || loading) return;
   const [wx, wy] = toWorld(e), c = cellAt(wx, wy);
   hero.exitSide = -1; hero.action = null;
+  const np = sideAt(wx, wy) < 0 && npcAt(wx, wy);
+  if (np) return goTo([0, np.x, np.y, 1, 1, np.cell], () => { const [x0, r0] = toXR(hero.cell), [x1, r1] = toXR(np.cell); const dd = DIRS.findIndex(([a, b]) => Math.sign(a) === Math.sign(x1 - x0) && Math.sign(b) === Math.sign(r1 - r0)); if (dd >= 0) hero.dir = dd; talk(np); });
   const mo = sideAt(wx, wy) < 0 && monsterAt(wx, wy);
   if (mo) return chat(`Groupe de ${mo.members.length} monstre${mo.members.length > 1 ? 's' : ''} (niveau ${mo.members.reduce((t, x) => t + x.lvl, 0)}) : les combats arrivent bientôt.`, 'info');
   const it = sideAt(wx, wy) < 0 && interAt(wx, wy);
@@ -349,16 +353,56 @@ function drawAnimated(e) { // animated map element = rig playing its default ani
 // Spawn positions are server data in the game; here they are seeded by the map id (same layout on every visit).
 let MON = null, monsters = [], hoveredMon = null;
 const monLooks = new Map();
-async function monLook(id) {
-  if (monLooks.has(id)) return monLooks.get(id);
-  const [, bone, skinIds, colors, scale] = MON.mon[id];
+const monLook = id => lookOf('m' + id, MON.mon[id].slice(1));
+// look [bone, skins, colours, scale %] -> rigs + skins for drawRig (cached per key). Bone 1 = player-like body, whose looks
+// normally carry their own scale (55 %…): a default 100 % means a normal-sized character.
+function lookOf(key, [bone, skinIds, colors, scale]) {
+  if (monLooks.has(key)) return monLooks.get(key);
   const p = (async () => {
     const skins = (await Promise.all(skinIds.map(s => loadSkin(gl, s)))).filter(Boolean);
     const base = { skins, cols: colorsOf(colors), scale: scale / 100 };
-    if (bone === 1) { const [move, idle] = await Promise.all([loadRig(gl, '1-movement'), loadRig(gl, '1-static')]); return move && idle && { ...base, move, idle, walk: 'AnimMarche', still: 'AnimStatiqueExplo0', scale: base.scale * .55 }; }
+    if (bone === 1) { const [move, idle] = await Promise.all([loadRig(gl, '1-movement'), loadRig(gl, '1-static')]); return move && idle && { ...base, move, idle, walk: 'AnimMarche', still: 'AnimStatiqueExplo0', scale: (scale === 100 ? 55 : scale) / 100 }; }
     const r = await loadRig(gl, bone); return r && { ...base, move: r, idle: r, walk: 'AnimMarche', still: 'AnimStatique' };
   })();
-  monLooks.set(id, p); return p;
+  monLooks.set(key, p); return p;
+}
+
+// ---------- NPCs: the client links them to maps only (data/npcs.json, from quest objectives); each stands on a fixed
+// walkable cell near the middle of its map. Click = walk to them, then their dialogue (data/npc/<id>.json).
+let NPC = null, npcs = [];
+async function spawnNpcs(m) {
+  npcs = [];
+  NPC ??= await fetch('data/npcs.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ maps: {}, npc: {} }));
+  const ids = NPC.maps[m.id] || []; if (!ids.length) return;
+  const [cx, cy] = cellXY(300), d = c => Math.hypot(cellXY(c)[0] - cx, cellXY(c)[1] - cy);
+  const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell).sort((a, b) => d(a) - d(b)), list = [];
+  for (const id of ids) {
+    const rnd = rng(id * 31 + m.id), spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 2));
+    const cell = spots[Math.floor(rnd() ** 2 * Math.min(spots.length, 60))]; if (cell == null) break;
+    const [x, y] = cellXY(cell), [name, ...look] = NPC.npc[id];
+    list.push({ npc: id, name, cell, x, y, dir: [1, 3][Math.floor(rnd() * 2)], path: [], t: rnd() * 5, look: await lookOf('n' + id, look) });
+  }
+  if (map === m) npcs = list.filter(n => n.look);
+}
+async function talk(n) {
+  const d = await fetch(`data/npc/${n.npc}.json${BUST}`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ messages: [], replies: [], actions: [] }));
+  const body = makeWindow('npc', n.name); let i = 0;
+  // the dialogue tree (which reply leads to which line) is server data: we show the lines in order, replies move on
+  const show = () => {
+    body.innerHTML = `<div style="max-width:420px"><p style="margin:0 0 10px;line-height:1.45">${d.messages[i % Math.max(1, d.messages.length)] || '…'}</p>
+      <div class="form">${d.actions.map(a => `<button data-a="${a}">${a}</button>`).join('')}${d.replies.slice(0, 6).map((r, k) => `<button data-r="${k}" style="text-align:left">${r}</button>`).join('')}
+      <button data-bye>Au revoir</button></div></div>`;
+  };
+  body.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.bye != null) return toggle('npc', false);
+    if (b.dataset.a) return chat(`${b.dataset.a} : bientôt disponible.`, 'info');
+    i++; show();
+  };
+  show(); toggle('npc', true);
+}
+function npcAt(wx, wy) {
+  return npcs.find(n => { const [a, b, c, d] = rigBox(n.look.idle), s = n.look.scale; return wx >= n.x + a * s && wx <= n.x + c * s && wy >= n.y + b * s && wy <= n.y + d * s; }) || null;
 }
 // animation name for a direction: stored directions vary per rig; 3, 4, 7 can be mirrors of 1, 0, 5
 function animFor(rig, base, dir) {
@@ -379,7 +423,7 @@ async function spawnMonsters(m) {
   MON ??= await fetch('data/monsters.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ sub: {}, mon: {}, bounty: {}, dungeon: [] }));
   const sub = mapIndex[m.id]?.[2], indoor = mapIndex[m.id]?.[3] === -1 && !MON.dungeon.includes(sub); // no monsters inside houses
   const ids = indoor ? [] : MON.sub[sub] || [], rnd = rng(m.id), list = [];
-  const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell);
+  const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell && npcs.every(n => Math.abs(cellXY(i)[0] - n.x) + Math.abs(cellXY(i)[1] - n.y) > W * 2));
   const member = id => { const [name, , , , , lo, hi] = MON.mon[id]; return { id, name, lvl: lo + Math.floor(rnd() * (hi - lo + 1)) }; };
   const place = members => {
     const spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 3)); if (!spots.length) return;
@@ -448,7 +492,7 @@ function render() {
   const bg = map.bg >>> 0; gl.clearColor((bg >> 16 & 255) / 255, (bg >> 8 & 255) / 255, (bg & 255) / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   beginSprites(); map.back.forEach(group);
   // actors (hero + monsters) are drawn before the first middleground group of a later cell
-  const actors = [hero, ...monsters].sort((a, b) => a.cell - b.cell);
+  const actors = [hero, ...npcs, ...monsters].sort((a, b) => a.cell - b.cell);
   const drawActor = a => { if (a === hero) drawHero(); else drawMonster(a); beginSprites(); };
   let k = 0;
   for (const g of map.depth) {
@@ -501,4 +545,4 @@ setupWorldMap(() => map.id, mapIndex, id => { toggle('map', false); startAudio()
 zaaps = await fetch('data/zaaps.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => zaaps);
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);
-window.game = { hero, get map() { return map; }, get monsters() { return monsters; }, findPath, enterMap, cellXY, audio, startAudio, sx, sy };
+window.game = { hero, get map() { return map; }, get monsters() { return monsters; }, get npcs() { return npcs; }, findPath, enterMap, cellXY, audio, startAudio, sx, sy };
