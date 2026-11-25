@@ -3,7 +3,7 @@
 .uitk-root [data-t] { --i: none; }
 /* window: dark panel, header with menu icon, title, close */
 .uitk-root .wf { background: var(--background_dark97); border-radius: 12px; box-shadow: 0 8px 30px #000c, inset 0 0 0 1px #ffffff14; min-width: 320px; }
-.uitk-root .wf-head { flex-direction: row; align-items: center; height: 48px; flex-shrink: 0; padding: 0 12px 0 14px; gap: 10px; cursor: move; border-radius: 12px 12px 0 0;
+.uitk-root .wf-head { flex-direction: row; align-items: center; height: 40px; flex-shrink: 0; padding: 0 12px 0 14px; gap: 10px; cursor: move; border-radius: 12px 12px 0 0;
   background: linear-gradient(var(--header_background), transparent); border-bottom: 1px solid var(--highlight_secondary25); }
 .uitk-root .wf--secondary .wf-head { background: none; }
 .uitk-root .wf-icon { width: 32px; height: 32px; object-fit: contain; }
@@ -11,7 +11,7 @@
 .uitk-root .wf-btn { width: 26px; height: 26px; border-radius: 6px; cursor: pointer; background: var(--i) center/16px no-repeat, var(--buttons_buttonSecondary); }
 .uitk-root .wf-close { --i: url(ui/uitk/img/cross.png); }
 .uitk-root .wf-btn:hover { background-color: var(--buttons_buttonSecondaryHover); }
-.uitk-root .wf-body { flex-grow: 1; }
+.uitk-root .wf-body { flex-grow: 1; overflow: hidden; border-radius: 0 0 12px 12px; } /* content stays inside its window */
 /* buttons */
 .uitk-root .dbtn { flex-direction: row; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 6px; cursor: pointer; flex-shrink: 0;
   background-color: var(--buttons_buttonPrimary); font-family: "Lexend-SemiBold"; }
@@ -34,7 +34,7 @@
 .uitk-root .dtab.is-checked, .uitk-root .dtab:hover { background: var(--background_medium100); box-shadow: inset 0 -2px var(--highlight_primary100); }
 /* icons, dividers, gauges */
 .uitk-root .dicon { width: 20px; height: 20px; flex-shrink: 0; background: var(--i) center/contain no-repeat; }
-.uitk-root .divider { flex-direction: row; align-items: center; gap: 6px; height: 14px; flex-shrink: 0; margin: 6px 0; }
+.uitk-root .divider { flex-direction: row; align-items: center; gap: 6px; height: 8px; flex-shrink: 0; margin: 0; }
 .uitk-root .divider i { flex-grow: 1; height: 1px; background: var(--highlight_secondary35); }
 .uitk-root .divider img { width: 12px; height: 12px; opacity: .8; }
 .uitk-root .divider--v { flex-direction: column; width: 14px; height: auto; margin: 0 6px; }
@@ -91,3 +91,7 @@
 .uitk-root .cosmetic.on { box-shadow: inset 0 0 0 2px var(--highlight_primary100); background: var(--highlight_primary25); }
 .uitk-root .cosmetic canvas { width: 100%; height: 100%; }
 .uitk-root .cosmetic span { position: absolute; right: 4px; bottom: 2px; font-size: 9px; color: var(--highlight_secondary65); }
+/* widget resize handle (bottom right corner), visible on hover like the header */
+.uitk-root .mdw-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 3; opacity: 0; transition: opacity .15s;
+  background: linear-gradient(135deg, transparent 50%, var(--highlight_secondary65) 50%, var(--highlight_secondary65) 60%, transparent 60%, transparent 72%, var(--highlight_secondary65) 72%, var(--highlight_secondary65) 82%, transparent 82%); }
+.uitk-root .mdw:hover > .mdw-resize { opacity: 1; }

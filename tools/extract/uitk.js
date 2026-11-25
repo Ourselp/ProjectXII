@@ -158,6 +158,7 @@ let out = fonts.map(f => `@font-face{font-family:"${f.replace('.ttf', '')}";src:
 .uitk-root,.uitk-root *{display:flex;flex-direction:column;flex-shrink:1;box-sizing:border-box;position:relative;min-width:0;min-height:0;margin:0;padding:0;border:0 solid transparent;
   background:center/100% 100% no-repeat;font-family:"Lexend-Regular",sans-serif;font-size:12px}
 .uitk-root{color:#fff;-webkit-font-smoothing:antialiased}
+.uitk-root *{pointer-events:auto}.uitk-root .pick-ignore{pointer-events:none} /* picking-mode=Ignore: clicks go through it, not through its children */
 .uitk-root .unity-text-element{justify-content:var(--uta-v,flex-start);-webkit-text-stroke:var(--uto-w,0) var(--uto-c,transparent);paint-order:stroke fill;white-space:normal}
 @property --u-img{syntax:'<image>';inherits:false;initial-value:linear-gradient(#0000,#0000)}@property --u-tint{syntax:'*';inherits:false}
 .uitk-root .tinted::before{${TINT}}.uitk-root .tinted{background-image:none!important}
@@ -189,7 +190,9 @@ function control(t, a, inner) { // -> [extra classes, inner html]
   const bar = (lo, hi, v) => `<div class="pb-fill" style="width:${Math.max(0, Math.min(100, (v - lo) / ((hi - lo) || 1) * 100))}%"></div>`;
   switch (t) {
     case 'MagneticDragWindow': // HUD widget: header (icon, title) shown on hover, dragged by it
-      return ['mdw', (a['has-header'] === 'false' ? '' : `<div class="mdw-head">${icon(a['header-icon']) ? `<div class="dbtn-icon" style="--i:url(${icon(a['header-icon'])})"></div>` : ''}<div class="mdw-title">${text(a['header-title'] || '')}</div></div>`) + inner];
+      return ['mdw', (a['has-header'] === 'false' ? '' : `<div class="mdw-head">${icon(a['header-icon']) ? `<div class="dbtn-icon" style="--i:url(${icon(a['header-icon'])})"></div>` : ''}<div class="mdw-title">${text(a['header-title'] || '')}</div></div>`) + inner +
+        // resizable unless the layout says otherwise (action bar: rows change through its own buttons): a corner handle
+        (['corner-resizable', 'horizontal-resizable', 'vertical-resizable'].some(k => a[k] === 'false') ? '' : '<div class="mdw-resize" title="Redimensionner"></div>')];
     case 'WindowFigma': return [`wf wf--${(a['header-style'] || 'primary').toLowerCase()}`, (a['with-title-bar'] === 'false' || a['hide-title-bar'] === 'true' ? '' :
       `<div class="wf-head">${icon(a['img-url']) ? `<img class="wf-icon" src="${icon(a['img-url'])}">` : ''}<div class="wf-title">${text(a.title || '')}</div>` +
       `${a['show-help-button'] === 'true' ? `<div class="wf-btn" style="--i:url(${icon(a['help-icon'] || 'questionMark')})"></div>` : ''}${a['show-close-button'] === 'false' ? '' : '<div class="wf-btn wf-close"></div>'}</div>`) + `<div class="wf-body">${inner}</div>`];
@@ -215,7 +218,7 @@ function control(t, a, inner) { // -> [extra classes, inner html]
   return ['', inner];
 }
 ['cross', 'emptySlot', 'slotInventory_silverM', 'slotInventory_goldM', 'checkboxActive', 'chevronBottom', // public/uitk-controls.css
-  ...'characteristic spells inventory quest success job guild alliance social alignment almanax encyclopedia guide mount companions cosmetics build groupSearch webShop map cog questionMark'.split(' ')].forEach(icon); // + banner menu (hud.js)
+  ...'characteristic spells inventory quest success job guild alliance social alignment almanax encyclopedia guide mount companions cosmetics build groupSearch webShop map cog questionMark statBack1 statBack2 statBack3 statBack4 statBack5 statBack6 tx_vitality tx_wisdom tx_strength tx_intelligence tx_chance tx_agility chevronLeft chevronRight'.split(' ')].forEach(icon); // + banner menu, characteristic tiles (hud.js)
 let built = 0;
 function element(vta, n, depth, usings) {
   const t = n.m_FullTypeName.split('.').pop(), a = {}; for (const p of n.m_Properties || []) a[p.name] = p.value;
@@ -238,7 +241,7 @@ function element(vta, n, depth, usings) {
   }
   const st2 = extra + st;
   if (a.text != null && BUILTIN[t]?.includes('text')) body = text(a.text) + body;
-  const classes = [BUILTIN[t], cls, ...scopes(vta, n), st.includes('--u-tint:') && 'tinted', ...(n.m_Classes || [])].filter(Boolean).join(' ');
+  const classes = [BUILTIN[t], cls, ...scopes(vta, n), st.includes('--u-tint:') && 'tinted', a['picking-mode'] === 'Ignore' && 'pick-ignore', ...(n.m_Classes || [])].filter(Boolean).join(' ');
   return `<div data-t="${t}"${a.name ? ` id="${html(a.name)}"` : ''}${classes ? ` class="${html(classes)}"` : ''}${st2 || bg ? ` style="${html((bg ? `--i:url(${bg});--u-img:url(${bg});` : '') + st2)}"` : ''}${a.tooltip ? ` title="${text(a.tooltip)}"` : ''}>${body}</div>`;
 }
 function layout(o, depth = 0, nested = false) {

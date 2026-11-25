@@ -15,7 +15,7 @@ per-page-load `?v=` (index.html imports `game.js?v=<now>`, the other modules reu
 
 - Click a cell to move (run if the path is longer than 3 cells). Click beyond a map edge to leave that way: green arrow where the
   map has an exit on that side, forbidden sign where it doesn't.
-- HUD = the client's own widgets, each a separate module dragged by its header (shown on hover), positions remembered (`/hud` resets):
+- HUD = the client's own widgets, each a separate module dragged by its header (shown on hover) and resized by its corner, positions and sizes remembered (`/hud` resets); Options: interface size:
   life heart + AP / MP, action bar (class spells, hover for details, keys 1–0), menu column (right), chat, XP gauge (top). Place name top left.
 - Test character: random stats on every line (level, characteristics, secondary stats, damages, resistances, kamas), `/stats` rolls new ones.
 - Menu: the client's own windows, converted from its UI Toolkit layouts (draggable by the title, Esc closes):
@@ -30,4 +30,4 @@ per-page-load `?v=` (index.html imports `game.js?v=<now>`, the other modules reu
 - The URL keeps the current map (`?map=…&cell=…`); `&look={"breed":9,"gender":1,…}` overrides the character.
   `charview.html` previews the character in every direction.
 
-How the assets are extracted and the formats: [docs/extraction.md](docs/extraction.md).
+How the assets are extracted and the formats: [docs/extraction.md](docs/extraction.md). The interface (HUD, menus, how they are filled): [docs/ui.md](docs/ui.md).

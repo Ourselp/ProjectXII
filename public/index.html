@@ -62,7 +62,9 @@ canvas.inv3d{position:absolute;left:50%;top:120px;width:300px;height:380px;margi
 <div id="win-options" class="win panel" hidden><h2>Options<button class="x">✕</button></h2><div class="body form">
   <label>Volume musique <input type="range" id="vol-music" min="0" max="100"></label>
   <label>Volume ambiance <input type="range" id="vol-amb" min="0" max="100"></label>
-  <label>Grille des cases <input type="checkbox" id="opt-grid"></label></div></div>
+  <label>Grille des cases <input type="checkbox" id="opt-grid"></label>
+  <label>Taille de l'interface <input type="range" id="opt-ui" min="60" max="150" step="5"></label>
+  <small style="color:var(--muted)">Modules : survol = bandeau pour déplacer, coin bas-droit pour redimensionner. /hud les remet en place.</small></div></div>
 
 <div id="win-help" class="win panel" hidden><h2>Aide<button class="x">✕</button></h2><div class="body" style="max-width:380px;line-height:1.5">
   Clic sur une case : se déplacer (course au-delà de 3 cases).<br>Clic au-delà d'un bord : changer de carte (flèche verte = sortie possible).<br>

@@ -16,6 +16,7 @@ node tools/extract/anim_gfx.js                                            # anim
 node tools/extract/quests.js                                              # quests: givers, steps, objectives (texts, NPCs, maps)
 node tools/extract/npcs.js                                                # NPCs the quests place + their dialogues (and rig list)
 node --max-old-space-size=8000 tools/extract/rigs.js "$C"                # rigs (player, animated elements, monsters, NPCs) and all skins
+[ -d extract/mon_picto ] || { mkdir -p extract/mon_picto_in; cp "$C/Picto/Monsters/monster_assets_1x.bundle" extract/mon_picto_in/; $A extract/mon_picto_in -m export -t sprite $V -g type -o extract/mon_picto; }
 node tools/extract/monsters.js                                            # monsters per subarea
 [ -d extract/wm ] || { mkdir -p extract/wm_in; cp "$C/Picto/Worldmaps/worldmap_assets_.bundle" extract/wm_in/; $A extract/wm_in -m export -t tex2d $V -g none -f assetName_pathID -o extract/wm; $A extract/wm_in -m extract -o extract/raw_wm; }
 node tools/extract/worldmap.js "$C"                                       # world map window: positions + illustrated map tiles
