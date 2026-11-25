@@ -78,8 +78,11 @@ parent links are back-references, kept as `{$rid}`):
 `Rotation` (static offset + sine), `Scale`, `Translation`, `ColorAnimation` (lerp to `finalColor`), `Wind` (sway above `bendStart`,
 in cell units of 86 px); `Dissolve` is approximated (alpha × (1 − alphaClip)). Not reproduced (need the game's noise/mask textures):
 `Distortion`, `Emissive`, noise variants.
-Staging targets (shown by scripted events) and `Refraction` groups are skipped.
-Middleground groups are sorted by `cellId` = depth order. `mapAnimatedElements` are rigs (`bone_<gfxId>`), drawn at their position
+Staging targets (shown by scripted events) and `Refraction` groups are skipped. Shader frequencies are in rad/s (`sin(f·t)`).
+Element `displayBehaviour` = `ObjectDisplayBehaviour` (names from il2cpp `global-metadata.dat`): 0 always, 1 hide if effects off,
+2 hide if effects on → 2 is fallback art for low quality and is dropped (we draw the effects).
+Middleground groups are sorted by `cellId` then `displayOrder` (rank within the cell; animated elements share that rank) = depth
+order. Cell `altitude` (px, exported as `alt` when non-zero) raises the actors standing on it. `mapAnimatedElements` are rigs (`bone_<gfxId>`), drawn at their position
 playing the rig's default animation.
 Cells: 14 × 40 Dofus 2 grid, 86 × 43, centre of cell `c` = `(-559 + (col + row%2/2)·86, 430 − row·21.5)`, i.e. the 1204 × 860 grid
 centred on the origin. `mapChangeData` = direction bits (1 E, 2 SE, 4 S, 8 SW, 16 W, 32 NW, 64 N, 128 NE).

@@ -1,6 +1,6 @@
 // All maps: extract/raw_maps (AssetStudio -m extract of Content/Map/Data) -> public/maps/<id>.json, public/maps/index.json,
 // public/gfx/<gfxId>.png (from extract/mapgfx), extract/map_sounds.json (FMOD event GUIDs used by maps, for audio.js).
-// group = [cellId, blend, fx, elements]; element = [gfxId, x, y, scaleX, scaleY, rotation, color]
+// group = [cellId, blend, fx, elements, 0, displayOrder (rank within its cell)]; element = [gfxId, x, y, scaleX, scaleY, rotation, color]
 // (Unity units = pixels, y up, sprite pivot = centre; colour = ARGB tint, 0x80 neutral)
 const fs = require('fs'), { readFile } = require('./unityread'), { unityToFmod } = require('./fmod');
 const T = f => JSON.parse(fs.readFileSync(`extract/data/${f}.json`)).objectsById.m_values;
@@ -37,7 +37,8 @@ function groups(m, L) {
     if (g.isStagingTarget && (!g.stagingId || events.some(e => norm(g.stagingId).startsWith(e)))) return [];
     if (p.some(x => x.$type === 'ShaderRefractionParameters')) return []; // needs the screen texture
     const b = p.find(x => x.$type === 'ShaderBlendingParameters');
-    return [[g.cellId ?? -1, b ? [b.sourceFactor, b.destinationFactor] : 0, fx(p), g.mapElements.map(el)]];
+    // displayBehaviour (ObjectDisplayBehaviour): 0 always, 1 hide if effects off, 2 hide if effects on (fallback art: we draw the effects)
+    return [[g.cellId ?? -1, b ? [b.sourceFactor, b.destinationFactor] : 0, fx(p), g.mapElements.filter(e => e.displayBehaviour !== 2).map(el), 0, g.displayOrder]];
   });
 }
 
@@ -66,10 +67,11 @@ for (const d of fs.readdirSync('extract/raw_maps')) for (const f of fs.readdirSy
       bg: m.backgroundColor.value, nb,
       music: music ? unityToFmod(music) : '', amb: amb ? unityToFmod(amb) : '',
       back: groups(m, 'background'), mid: groups(m, 'middleground'), fore: groups(m, 'foreground'),
-      anim: m.mapAnimatedElements.map(e => [...el(e), e.cellId ?? -1]),
+      anim: m.mapAnimatedElements.map(e => [...el(e), e.cellId ?? -1, e.displayOrder]), // displayOrder: rank among its cell's middleground groups
       // bit0 walkable, bit1 map change, bits 8+: mapChangeData (direction mask)
       // interactive elements (zaap, doors, resources…): [gfxId, x, y, scaleX, scaleY, cellId, interactiveId, animated]
       inter: interactives(m),
+      ...(m.cellsData.some(c => c.altitude) && { alt: m.cellsData.map(c => c.altitude) }), // cell height (px): actors stand that much higher
       cells: m.cellsData.map(c => (c.mov ? 1 : 0) | (c.mapChangeData ? 2 : 0) | (c.mapChangeData << 8)),
     };
     for (const L of ['back', 'mid', 'fore']) for (const g of out[L]) for (const e of g[3]) gfx.add(e[0]);

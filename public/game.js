@@ -12,7 +12,7 @@ const gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false });
 // cell grid in map units: 14 x 40 Dofus 2 grid of 86 x 43 diamonds centred on the map (1204 x 860)
 const W = 86, H = 43, X0 = -602 + 43, Y0 = 430;
 const WALK = 3.2, RUN = 7;                            // cells per second
-const cellXY = c => { const r = Math.floor(c / 14), col = c % 14; return [X0 + (col + (r % 2) / 2) * W, Y0 - r * H / 2]; };
+const cellXY = c => { const r = Math.floor(c / 14), col = c % 14; return [X0 + (col + (r % 2) / 2) * W, Y0 - r * H / 2 + (map?.alt?.[c] || 0)]; }; // + cell altitude
 const info = document.getElementById('place');
 
 // ---------- sprite renderer: textured quad, ARGB tint (0x80 = neutral), optional wind bend
@@ -138,7 +138,7 @@ async function enterMap(id, cell) {
     const keep = new Set(used);
     for (const [g, T] of tex) if (!keep.has(g)) { const v = await T; if (v && v.t) gl.deleteTexture(v.t); tex.delete(g); }
     // depth list: middleground groups + animated elements, by cell (the hero is inserted while drawing)
-    m.depth = [...m.mid, ...m.anim.map(e => [e[7], 0, 0, [e], true])].sort((a, b) => a[0] - b[0]);
+    m.depth = [...m.mid, ...m.anim.map(e => [e[7], 0, 0, [e], true, e[8] ?? 99])].sort((a, b) => a[0] - b[0] || (a[5] ?? 0) - (b[5] ?? 0));
     // art bounds (background layer, ignoring stretched overlays) for the camera
     const A = { x0: GRID.l, x1: GRID.r, y0: GRID.b, y1: GRID.t };
     for (const g of m.back) for (const [gid, x, y, scx, scy] of g[3]) {
