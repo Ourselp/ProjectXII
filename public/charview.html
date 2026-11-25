@@ -1,18 +1,20 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><title>projectZero · personnage</title>
-<style>body{margin:0;background:#7a9;font:13px sans-serif;color:#fff}#hud{position:fixed;right:8px;top:6px}#look{background:#111d;padding:4px 8px;border-radius:6px}#look .f{display:grid;gap:4px}</style></head>
-<body><canvas id="c" width="1000" height="420"></canvas><div id="hud"><details id="look" open><summary>Personnage</summary><div class="f"></div></details></div>
+<style>body{margin:0;background:#7a9;font:13px sans-serif;color:#fff}#side{position:fixed;right:8px;top:6px;background:#111d;padding:8px;border-radius:6px;display:grid;gap:4px}
+.form{display:grid;gap:4px}.form label{display:flex;justify-content:space-between;gap:6px}</style></head>
+<body><canvas id="c" width="1000" height="420"></canvas><div id="side"><form id="look-form" class="form"></form><form id="equip-form" class="form"></form></div>
 <script type="module">
-// Preview of the current look (same panel as the game): idle, walk, run in the 5 stored directions. ?anim=Marche|Course|StatiqueExplo0
-import { setupLook, look } from './look.js';
-import { drawRig } from './rig.js';
+// Preview of the current look: idle, walk or run in the 5 stored directions. ?anim=Marche|Course|StatiqueExplo0
+const V = `?v=${Date.now()}`;
+const { setupLook, buildLook } = await import('./look.js' + V), { drawRig } = await import('./rig.js' + V);
 const gl = document.getElementById('c').getContext('webgl', { premultipliedAlpha: true });
-await setupLook(gl);
+let L = null;
+addEventListener('look', async () => { L = await buildLook(gl); });
+await setupLook();
 const kind = new URLSearchParams(location.search).get('anim') || 'Marche';
 let f = 0;
 (function loop() {
   gl.clearColor(.48, .6, .53, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-  const L = look();
-  if (L.ready) [0, 1, 2, 5, 6].forEach((d, i) => drawRig(gl, kind.startsWith('Statique') ? L.idle : L.move, L.skins, `Anim${kind}_${d}`, f, 100 + i * 200, 380, L.scale * 1.6, false, L.cols));
+  if (L?.ready) [0, 1, 2, 5, 6].forEach((d, i) => drawRig(gl, kind.startsWith('Statique') ? L.idle : L.move, L.skins, `Anim${kind}_${d}`, f, 100 + i * 200, 380, L.scale * 1.6, false, L.cols));
   f++; document.title = 'ok ' + f; setTimeout(loop, 1000 / 30);
 })();
 </script></body></html>

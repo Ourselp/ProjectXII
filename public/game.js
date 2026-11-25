@@ -1,8 +1,10 @@
 // Dofus 3 world walk-around: WebGL map renderer (all maps) + skinned character, click to move, map changes, music.
-import { loadRig, drawRig } from './rig.js';
-import { setupLook, look } from './look.js';
-import { setupHud, setClass, chat, nameAt } from './hud.js';
-import { openWorldMap } from './worldmap.js';
+// modules are imported with the same ?v= as this file (index.html adds a fresh one per load: no caching for now)
+const V = new URL(import.meta.url).search;
+const { loadRig, drawRig, BUST } = await import('./rig.js' + V);
+const { setupLook, buildLook } = await import('./look.js' + V);
+const { setupHud, chat, nameAt, onCommand, toggle } = await import('./hud.js' + V);
+const { setupWorldMap } = await import('./worldmap.js' + V);
 
 const cv = document.getElementById('c');
 const gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false });
@@ -10,7 +12,7 @@ const gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false });
 const W = 86, H = 43, X0 = -602 + 43, Y0 = 430;
 const WALK = 3.2, RUN = 7;                            // cells per second
 const cellXY = c => { const r = Math.floor(c / 14), col = c % 14; return [X0 + (col + (r % 2) / 2) * W, Y0 - r * H / 2]; };
-const info = document.getElementById('info');
+const info = document.getElementById('place');
 
 // ---------- sprite renderer: textured quad, ARGB tint (0x80 = neutral), optional wind bend
 const prog = (() => {
@@ -36,7 +38,7 @@ function loadTex(g) {
     const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    r({ t, w: img.width, h: img.height }); }; img.src = `gfx/${g}.png`; });
+    r({ t, w: img.width, h: img.height }); }; img.src = `gfx/${g}.png${BUST}`; });
   tex.set(g, p); return p;
 }
 
@@ -85,12 +87,17 @@ function sprite([g, x, y, scx, scy, rot, col], fx, i) {
 
 // ---------- audio: map music + ambience (looped stems), starts after the first click (autoplay policy)
 const audio = { idx: null, playing: {}, muted: localStorage.muted === '1', started: false };
+const vol = kind => (+(localStorage['vol_' + kind] ?? (kind === 'music' ? 45 : 35))) / 100;
+for (const kind of ['music', 'amb']) {
+  const el = document.getElementById('vol-' + kind); el.value = vol(kind) * 100;
+  el.oninput = () => { localStorage['vol_' + kind] = el.value; audio.playing[kind]?.els.forEach(a => a.volume = vol(kind)); };
+}
 async function playLayer(kind, event) {
-  if (!audio.idx) audio.idx = await fetch('audio/index.json').then(r => r.json()).catch(() => ({}));
+  if (!audio.idx) audio.idx = await fetch('audio/index.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({}));
   const cur = audio.playing[kind];
   if (cur && cur.event === event) return;
   if (cur) cur.els.forEach(a => { const v0 = a.volume; let k = 1; const iv = setInterval(() => { k -= .1; a.volume = Math.max(0, v0 * k); if (k <= 0) { a.pause(); clearInterval(iv); } }, 80); });
-  const els = (audio.idx[event] || []).map(f => { const a = new Audio(`audio/${f}`); a.loop = true; a.volume = kind === 'music' ? .45 : .35; a.muted = audio.muted; return a; });
+  const els = (audio.idx[event] || []).map(f => { const a = new Audio(`audio/${f}${BUST}`); a.loop = true; a.volume = vol(kind); a.muted = audio.muted; return a; });
   audio.playing[kind] = { event, els };
   if (audio.started) els.forEach(a => a.play().catch(() => {}));
 }
@@ -106,7 +113,7 @@ async function enterMap(id, cell) {
   if (loading) return; loading = true;
   info.textContent = 'Chargement…';
   try {
-    const m = await (await fetch(`maps/${id}.json`, { cache: 'no-cache' })).json();
+    const m = await (await fetch(`maps/${id}.json${BUST}`, { cache: 'no-store' })).json();
     const used = [...m.back, ...m.mid, ...m.fore].flatMap(g => g[3]).map(e => e[0]);
     await Promise.all([...used.map(loadTex), ...m.anim.map(async e => { if (!rigs.has(e[0])) rigs.set(e[0], await loadRig(gl, e[0])); })]);
     for (const g of used) tex.set(g, await tex.get(g));
@@ -118,7 +125,7 @@ async function enterMap(id, cell) {
     map = m;
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
     [hero.x, hero.y] = cellXY(cell); hero.cell = cell; hero.path = [];
-    info.innerHTML = `<b>${m.name || '?'}</b> [${m.pos}]`; info.title = `carte ${m.id}`;
+    info.innerHTML = `<b>${m.name || '?'}</b><small>[${m.pos}] · carte ${m.id}</small>`;
     if (map0 !== m.id) chat(`${m.name || 'Carte'} [${m.pos}]`, 'map'); map0 = m.id;
     history.replaceState(null, '', `?map=${m.id}&cell=${cell}`);
     playLayer('music', m.music); playLayer('amb', m.amb);
@@ -205,24 +212,26 @@ function leave(c) {
   if (side != null) enterMap(map.nb[side], ARRIVE[side](c));
 }
 
-// teleport box: "x,y" (world coordinates, main world preferred) or a map id
-document.getElementById('go').addEventListener('submit', e => {
-  e.preventDefault(); startAudio();
-  const v = e.target.q.value.trim(), m = v.match(/^\[?\s*(-?\d+)\s*[,; ]\s*(-?\d+)\s*\]?$/);
+// teleport: "x,y" (world coordinates, main world preferred) or a map id — /tp in the chat, box in the world map window
+function teleport(v) {
+  startAudio(); v = v.trim(); const m = v.match(/^\[?\s*(-?\d+)\s*[,; ]\s*(-?\d+)\s*\]?$/);
   let id = null;
   if (m) {
     const hits = Object.entries(mapIndex).filter(([, p]) => p[0] === +m[1] && p[1] === +m[2]);
     hits.sort((a, b) => (b[1][3] === 1) - (a[1][3] === 1));
     id = hits[0]?.[0];
   } else if (mapIndex[v]) id = v;
-  if (id) enterMap(id); else info.textContent = `Aucune carte pour « ${v} »`;
-});
+  if (id) { toggle('map', false); enterMap(id); } else chat(`Aucune carte pour « ${v} »`, 'warn');
+}
+onCommand('tp', teleport);
+document.getElementById('go').addEventListener('submit', e => { e.preventDefault(); teleport(e.target.q.value); });
 
 // ---------- loop
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; time += dt;
-  if (cv.width !== innerWidth * devicePixelRatio || cv.height !== innerHeight * devicePixelRatio) { cv.width = innerWidth * devicePixelRatio; cv.height = innerHeight * devicePixelRatio; }
+  const cw = Math.round(cv.clientWidth * devicePixelRatio), ch = Math.round(cv.clientHeight * devicePixelRatio);
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
   gl.viewport(0, 0, cv.width, cv.height);
   if (map) { update(dt); render(); }
   requestAnimationFrame(frame);
@@ -242,7 +251,7 @@ function update(dt) {
   } else { hero.x += dx / dist * step; hero.y += dy / dist * step; }
 }
 function drawHero() {
-  const L = look(); if (!L.ready) return;
+  const L = look; if (!L?.ready) return;
   // stored directions 0,1,2,5,6; 3,4,7 are mirrors of 1,0,5
   const mirror = { 3: 1, 4: 0, 7: 5 }, d = mirror[hero.dir] ?? hero.dir, flip = hero.dir in mirror;
   const [rig, anim] = hero.moving ? [L.move, (hero.run ? 'AnimCourse_' : 'AnimMarche_') + d] : [L.idle, 'AnimStatiqueExplo0_' + d];
@@ -266,17 +275,28 @@ function render() {
   }
   if (!drawn) { drawHero(); beginSprites(); }
   map.fore.forEach(group);
+  if (showGrid) drawGrid();
+}
+// option: cell grid (walkable = teal, exits = green), drawn with the sprite program as thin quads would be overkill: 2D overlay canvas
+const ov = document.createElement('canvas'); ov.style.cssText = 'position:fixed;left:0;top:0;pointer-events:none'; document.body.append(ov);
+let showGrid = localStorage.grid === '1';
+const gridBox = document.getElementById('opt-grid'); gridBox.checked = showGrid;
+gridBox.onchange = () => { showGrid = gridBox.checked; localStorage.grid = showGrid ? '1' : '0'; if (!showGrid) ov.getContext('2d').clearRect(0, 0, ov.width, ov.height); };
+function drawGrid() {
+  if (ov.width !== cv.width || ov.height !== cv.height) { ov.width = cv.width; ov.height = cv.height; ov.style.width = cv.clientWidth + 'px'; ov.style.height = cv.clientHeight + 'px'; }
+  const c = ov.getContext('2d'); c.clearRect(0, 0, ov.width, ov.height); c.lineWidth = 1;
+  map.cells.forEach((v, i) => { if (!(v & 1)) return; const [x, y] = cellXY(i), X = sx(x), Y = sy(y), w = W / 2 * cam.z, h = H / 2 * cam.z;
+    c.beginPath(); c.moveTo(X, Y - h); c.lineTo(X + w, Y); c.lineTo(X, Y + h); c.lineTo(X - w, Y); c.closePath(); c.strokeStyle = v & 2 ? '#46d64fcc' : '#38c9b466'; c.stroke(); });
 }
 
 hero = { x: 0, y: 0, cell: 0, dir: 1, t: 0, path: [], moving: false, run: false };
 const q = new URLSearchParams(location.search);
+let look = null;
 await setupHud();
-addEventListener('look', e => setClass(e.detail.breed, e.detail.gender));
-[mapIndex] = await Promise.all([fetch('maps/index.json', { cache: 'no-cache' }).then(r => r.json()), setupLook(gl)]);
-const openMap = () => openWorldMap(map.id, mapIndex, id => enterMap(id));
-document.getElementById('openmap').onclick = openMap;
-addEventListener('keydown', e => { if ((e.key === 'm' || e.key === 'M') && e.target.tagName !== 'INPUT') { const w = document.getElementById('wm'); w.hidden ? openMap() : (w.hidden = true); } });
-document.getElementById('say').addEventListener('submit', e => { e.preventDefault(); const t = e.target.t.value.trim(); if (t) chat(`Chabou : ${t}`); e.target.t.value = ''; });
+addEventListener('look', async () => { look = await buildLook(gl); });
+mapIndex = await fetch('maps/index.json' + BUST, { cache: 'no-store' }).then(r => r.json());
+await setupLook();
+setupWorldMap(() => map.id, mapIndex, id => { toggle('map', false); startAudio(); enterMap(id); });
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);
 window.game = { hero, get map() { return map; }, findPath, enterMap, cellXY, audio, startAudio };

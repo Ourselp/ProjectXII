@@ -1,78 +1,125 @@
 <!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store">
 <title>projectZero</title>
 <style>
-:root{--panel:#151a1fe6;--line:#3b4652;--accent:#e8b04a;--text:#eef2f5}
+/* own palette: night blue panels, teal accents, warm gold highlights */
+:root{--bg:#121a26f2;--bg2:#1b2636;--line:#2f4058;--teal:#38c9b4;--gold:#f2c14e;--text:#e9f0f7;--muted:#9fb0c3}
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font:13px system-ui,sans-serif;color:var(--text)}
-canvas{display:block;width:100vw;height:100vh}
-button,input,select{font:inherit;color:var(--text);background:#222a33;border:1px solid var(--line);border-radius:6px;padding:2px 6px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 4px 14px #0008}
-/* top */
-#top{position:fixed;left:8px;top:8px;right:8px;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
-#top>*{pointer-events:auto}
-#info{padding:5px 10px;pointer-events:none}
-#info b{color:var(--accent)}
-#spacer{flex:1}
-#go input{width:120px}
-#look{padding:4px 8px;max-width:270px}
-#look summary{cursor:pointer}
-#look .f{display:grid;gap:4px;margin-top:6px}
-#look label{display:flex;justify-content:space-between;gap:6px;align-items:center}
-#look input[type=color]{width:24px;height:20px;padding:0;border:0}
-/* name above the hero */
+canvas#c{display:block;width:100vw;height:calc(100vh - 118px)}
+button,input,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:3px 7px}
+button{cursor:pointer}button:hover{border-color:var(--teal)}
+.panel{background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 18px #000a}
+/* top left: where am I */
+#place{position:fixed;left:10px;top:10px;padding:6px 12px;pointer-events:none}
+#place b{color:var(--gold);font-size:14px}#place small{display:block;color:var(--muted)}
 #heroname{position:fixed;left:0;top:0;pointer-events:none;font-weight:600;color:#fff;text-shadow:0 0 3px #000,0 0 6px #000;white-space:nowrap}
-/* bottom bar */
-#bar{position:fixed;right:8px;bottom:8px;display:flex;gap:10px;align-items:stretch;padding:8px 10px}
-#plate{display:flex;gap:8px;align-items:center}
-#portrait{width:54px;height:54px;border-radius:50%;object-fit:cover;background:#0006;border:2px solid var(--accent)}
-#hud-name{font-weight:700;font-size:15px}
-#hud-class{opacity:.75;font-size:12px;white-space:nowrap}
-#stats{display:flex;gap:6px;align-items:center}
-.stat{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;font-weight:700;font-size:12px;text-align:center;line-height:1.05}
-.stat small{display:block;font-weight:400;opacity:.8;font-size:10px}
-#life{background:radial-gradient(circle at 50% 35%,#e0505a,#7a1620);border:2px solid #f08a90}
-#ap{background:radial-gradient(circle at 50% 35%,#4fa3e8,#16467a);border:2px solid #8cc6f2;width:40px;height:40px}
-#mp{background:radial-gradient(circle at 50% 35%,#5bc46b,#1d6b2a);border:2px solid #96e0a0;width:40px;height:40px}
-#spells{display:grid;grid-template-columns:repeat(12,40px);grid-auto-rows:40px;gap:4px;max-width:calc(12*44px)}
-#spells button{position:relative;padding:0;width:40px;height:40px;overflow:hidden;cursor:pointer;background:#0d1115}
-#spells button:hover{border-color:var(--accent)}
-#spells img{width:100%;height:100%;display:block}
-#spells kbd{position:absolute;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0 0 2px #000}
-#spells button.cast{animation:cast .5s}
-@keyframes cast{0%{box-shadow:0 0 0 0 var(--accent)}100%{box-shadow:0 0 0 10px #0000}}
-#xp{position:absolute;left:10px;right:10px;top:-4px;height:4px;border-radius:2px;background:#000a;overflow:hidden}
-#xp i{display:block;width:12%;height:100%;background:var(--accent)}
-#tip{position:fixed;width:260px;padding:8px 10px;pointer-events:none;z-index:5}
-#tip b{color:var(--accent);display:block}#tip span{opacity:.8;font-size:12px}#tip p{margin:6px 0 0}
-/* chat */
-#chat{position:fixed;left:8px;bottom:8px;width:330px;height:150px;display:flex;flex-direction:column;padding:6px}
-#chatlog{flex:1;overflow-y:auto;font-size:12px;line-height:1.35}
-#chatlog .info{color:#9fd3ff}#chatlog .map{color:#ffd27a}#chatlog .warn{color:#ff9f9f}
-#chat form{display:flex;margin-top:4px}#chat input{flex:1}
+/* bottom banner: chat | stats | spells | menu */
+#banner{position:fixed;left:0;right:0;bottom:0;height:118px;display:grid;grid-template-columns:minmax(260px,1.2fr) auto minmax(300px,2fr) auto;gap:10px;
+  padding:8px 10px;box-sizing:border-box;background:linear-gradient(#18222f,#0e141c);border-top:2px solid var(--teal)}
+#xp{position:absolute;left:0;right:0;top:-6px;height:4px;background:#0009}#xp i{display:block;width:12%;height:100%;background:var(--gold)}
+#chat{display:flex;flex-direction:column;min-width:0}
+#chatlog{flex:1;overflow-y:auto;font-size:12px;line-height:1.35;padding:2px 4px;background:#0006;border-radius:6px}
+#chatlog .info{color:#9fe3d8}#chatlog .map{color:var(--gold)}#chatlog .warn{color:#ff9f9f}
+#say{display:flex;margin-top:4px}#say input{flex:1}
+#core{display:flex;align-items:center;gap:8px}
+#core .portrait{width:62px;height:62px;border-radius:50%;object-fit:cover;background:#0006;border:2px solid var(--gold)}
+#core .who{display:flex;flex-direction:column;gap:2px;min-width:90px}.hero-name{font-weight:700;font-size:15px}.cls{color:var(--muted);font-size:12px;white-space:nowrap}
+.orb{display:grid;place-items:center;border-radius:50%;font-weight:700;text-align:center;line-height:1.05}
+.orb small{display:block;font-weight:400;opacity:.8;font-size:10px}
+#life{width:74px;height:74px;font-size:15px;background:radial-gradient(circle at 50% 30%,#ff7a6b,#8f2318);border:3px solid #ffb0a6}
+#ap,#mp{width:42px;height:42px;font-size:13px}
+#ap{background:radial-gradient(circle at 50% 30%,#7cc8ff,#1d4f86);border:2px solid #bfe2ff}
+#mp{background:radial-gradient(circle at 50% 30%,#7fe08a,#1f6b2b);border:2px solid #c3f2c9}
+#spellbar{display:grid;grid-template-columns:repeat(auto-fill,40px);grid-auto-rows:40px;gap:4px;align-content:center;overflow:hidden}
+#spellbar button,.spell button{position:relative;padding:0;width:40px;height:40px;overflow:hidden;background:#0b1118}
+#spellbar img,.spell img{width:100%;height:100%;display:block}
+kbd{position:absolute;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0 0 2px #000}
+.cast{animation:cast .5s}@keyframes cast{0%{box-shadow:0 0 0 0 var(--gold)}100%{box-shadow:0 0 0 10px #0000}}
+#menu{display:grid;grid-template-columns:repeat(4,44px);grid-auto-rows:44px;gap:5px;align-content:center}
+#menu button{padding:0;font-size:18px;display:grid;place-items:center}
+#menu button.on{border-color:var(--gold);background:#2a3a52}
+#tip{position:fixed;width:260px;padding:8px 10px;pointer-events:none;z-index:50}
+#tip b{color:var(--gold);display:block}#tip span{color:var(--muted);font-size:12px}#tip p{margin:6px 0 0}
+/* windows */
+.win{position:fixed;left:120px;top:70px;min-width:280px;max-height:calc(100vh - 200px);display:flex;flex-direction:column;z-index:20}
+.win[hidden]{display:none}
+.win h2{margin:0;padding:7px 12px;font-size:14px;display:flex;align-items:center;gap:8px;cursor:move;border-bottom:1px solid var(--line);color:var(--gold);user-select:none}
+.win h2 .x{margin-left:auto;padding:0 7px}
+.win .body{padding:10px 12px;overflow:auto}
+.form{display:grid;gap:6px}.form label{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.cols{display:flex;gap:3px}.form input[type=color]{width:26px;height:22px;padding:0;border:0;background:none}
+.preview{width:200px;height:240px;background:radial-gradient(#2a3a52,#121a26);border-radius:8px;cursor:pointer}
+.row{display:flex;gap:12px;align-items:flex-start}
+#bag{display:grid;grid-template-columns:repeat(6,38px);grid-auto-rows:38px;gap:4px;margin-top:8px}
+#bag div{background:#0b1118;border:1px solid var(--line);border-radius:5px}
+.stats td{padding:3px 8px}.stats td:last-child{text-align:right;color:var(--gold)}
+.spell{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)}.spell p{margin:3px 0 0;color:var(--muted)}.spell span{color:var(--muted);font-size:12px}
+#spell-list{max-width:460px}
 /* world map */
-#wm{position:fixed;inset:50px 40px 40px;z-index:10;display:flex;flex-direction:column;padding:8px}
-#wm[hidden]{display:none}
-#wm header{display:flex;gap:10px;align-items:center;margin-bottom:6px}#wm header span{flex:1;opacity:.6;font-size:12px}
-#wm canvas{flex:1;width:100%;min-height:0;border-radius:6px;cursor:crosshair;touch-action:none}
-#wm .tip{position:absolute;padding:5px 8px;pointer-events:none;font-size:12px}#wm .tip b{color:var(--accent)}
-@media (max-width:1250px){#chat{display:none}}
+#win-map{left:40px;top:40px;right:40px;bottom:140px;max-height:none}
+#win-map .body{flex:1;display:flex;flex-direction:column;padding:6px 8px;min-height:0}
+#wm-tools{display:flex;gap:8px;align-items:center;margin-bottom:6px}#wm-tools span{flex:1;color:var(--muted);font-size:12px}
+#wm-canvas{flex:1;width:100%;min-height:0;border-radius:6px;cursor:crosshair;touch-action:none}
+#wm-tip{position:absolute;padding:5px 8px;pointer-events:none;font-size:12px;z-index:2}#wm-tip b{color:var(--gold)}
+@media (max-width:1100px){#banner{grid-template-columns:auto minmax(200px,1fr) auto}#chat{display:none}}
 </style>
 </head><body><canvas id="c"></canvas>
-<div id="heroname"></div>
-<div id="top">
-  <div id="info" class="panel">Chargement…</div><div id="spacer"></div>
-  <form id="go"><input name="q" placeholder="x,y ou id de carte" title="Téléportation : coordonnées (ex. 5,-18) ou identifiant de carte"></form>
-  <button id="openmap" title="Carte du monde (M)">Carte</button>
-  <button id="mute" title="Son"></button>
-  <details id="look" class="panel"><summary>Personnage</summary><div class="f"></div></details>
-</div>
-<div id="chat" class="panel"><div id="chatlog"></div><form id="say"><input name="t" placeholder="Message…" autocomplete="off"></form></div>
-<div id="bar" class="panel">
+<div id="heroname" class="hero-name"></div>
+<div id="place" class="panel">Chargement…</div>
+
+<div id="banner">
   <div id="xp"><i></i></div>
-  <div id="plate"><img id="portrait" alt=""><div><div id="hud-name"></div><div id="hud-class"></div></div></div>
-  <div id="stats"><div class="stat" id="life">55<small>/55</small></div><div class="stat" id="ap">6<small>PA</small></div><div class="stat" id="mp">3<small>PM</small></div></div>
-  <div id="spells"></div>
+  <div id="chat"><div id="chatlog"></div><form id="say"><input name="t" placeholder="Entrée pour parler · /tp x,y" autocomplete="off"></form></div>
+  <div id="core">
+    <img class="portrait" alt="">
+    <div class="who"><span class="hero-name"></span><span class="cls"></span></div>
+    <div class="orb" id="life">55<small>/ 55</small></div>
+    <div style="display:grid;gap:4px"><div class="orb" id="ap">6<small>PA</small></div><div class="orb" id="mp">3<small>PM</small></div></div>
+  </div>
+  <div id="spellbar"></div>
+  <div id="menu">
+    <button data-win="stats" title="Caractéristiques (C)">📜</button>
+    <button data-win="spells" title="Sorts (S)">✨</button>
+    <button data-win="inventory" title="Inventaire (I)">🎒</button>
+    <button data-win="look" title="Apparence (A)">🎨</button>
+    <button data-win="map" title="Carte du monde (M)">🗺️</button>
+    <button id="mute" title="Son"></button>
+    <button data-win="options" title="Options (O)">⚙️</button>
+    <button data-win="help" title="Aide">❔</button>
+  </div>
 </div>
 <div id="tip" class="panel" hidden></div>
-<div id="wm" class="panel" hidden><header><b>Carte du monde</b><select></select><span>glisser pour déplacer · molette pour zoomer · clic pour s'y rendre</span><button class="close" title="Fermer (Échap)">✕</button></header><canvas></canvas><div class="tip panel" hidden></div></div>
-<script type="module" src="game.js"></script></body></html>
+
+<div id="win-stats" class="win panel" hidden><h2>Caractéristiques<button class="x">✕</button></h2><div class="body">
+  <div class="row"><img class="portrait" alt="" style="width:64px;height:64px;border-radius:50%;border:2px solid var(--gold)"><div><div class="hero-name"></div><div class="cls"></div></div></div>
+  <table class="stats"><tr><td>Points de vie</td><td>55 / 55</td></tr><tr><td>Points d'action</td><td>6</td></tr><tr><td>Points de mouvement</td><td>3</td></tr>
+  <tr><td>Vitalité</td><td>0</td></tr><tr><td>Sagesse</td><td>0</td></tr><tr><td>Force</td><td>0</td></tr><tr><td>Intelligence</td><td>0</td></tr><tr><td>Chance</td><td>0</td></tr><tr><td>Agilité</td><td>0</td></tr>
+  <tr><td>Expérience</td><td>0 / 110</td></tr><tr><td>Kamas</td><td>0</td></tr></table></div></div>
+
+<div id="win-spells" class="win panel" hidden><h2>Sorts<button class="x">✕</button></h2><div class="body"><div id="spell-list"></div></div></div>
+
+<div id="win-inventory" class="win panel" hidden style="left:auto;right:20px"><h2>Inventaire<button class="x">✕</button></h2><div class="body"><div class="row">
+  <div><canvas class="preview" width="200" height="240" title="Cliquer pour tourner"></canvas><form id="equip-form" class="form" style="margin-top:6px"></form></div>
+  <div><b>Objets</b> <span style="color:var(--muted)">· 0 kamas</span><div id="bag"></div></div></div></div></div>
+
+<div id="win-look" class="win panel" hidden><h2>Apparence<button class="x">✕</button></h2><div class="body"><div class="row">
+  <canvas class="preview" width="200" height="240" title="Cliquer pour tourner"></canvas><form id="look-form" class="form"></form></div></div></div>
+
+<div id="win-map" class="win panel" hidden><h2>Carte du monde<button class="x">✕</button></h2><div class="body">
+  <div id="wm-tools"><select id="wm-world"></select><form id="go"><input name="q" placeholder="x,y ou id de carte"></form><span>glisser · molette · clic pour s'y rendre</span></div>
+  <canvas id="wm-canvas"></canvas><div id="wm-tip" class="panel" hidden></div></div></div>
+
+<div id="win-options" class="win panel" hidden><h2>Options<button class="x">✕</button></h2><div class="body form">
+  <label>Volume musique <input type="range" id="vol-music" min="0" max="100"></label>
+  <label>Volume ambiance <input type="range" id="vol-amb" min="0" max="100"></label>
+  <label>Grille des cases <input type="checkbox" id="opt-grid"></label></div></div>
+
+<div id="win-help" class="win panel" hidden><h2>Aide<button class="x">✕</button></h2><div class="body" style="max-width:380px;line-height:1.5">
+  Clic sur une case : se déplacer (course au-delà de 3 cases).<br>Clic au-delà d'un bord : changer de carte (flèche verte = sortie possible).<br>
+  Raccourcis : C caractéristiques, S sorts, I inventaire, A apparence, M carte, O options, 1–0 sorts, Entrée chat, Échap fermer.<br>
+  Commande : <code>/tp 5,-18</code> ou <code>/tp &lt;id de carte&gt;</code>.</div></div>
+
+<script>document.querySelector('#bag').innerHTML = '<div></div>'.repeat(36);
+  import(`./game.js?v=${Date.now()}`); // no caching for now: every module is fetched fresh on each load</script>
+</body></html>

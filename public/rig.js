@@ -9,9 +9,12 @@ void main(){ vec4 c = texture2D(tex, vuv); int zi = int(vz + .5); vec3 t = vec3(
   for (int i = 1; i < 7; i++) if (i == zi) t = cols[i] * 2.; // grey (0.5) * 2*colour = colour
   vec4 o = vec4(c.rgb * t * vmc.rgb * tint.rgb, c.a * vmc.a * tint.a); gl_FragColor = vec4(o.rgb * o.a, o.a); }`;
 
-let prog, buf;
-const cache = new Map();
+// per WebGL context: program, buffer, textures (the game canvas and the character preview each have one)
+const ctxs = new WeakMap();
+const C = gl => ctxs.get(gl) || (ctxs.set(gl, { tex: new Map() }), ctxs.get(gl));
+export const BUST = `?v=${Date.now()}`; // fresh copy of every asset on each page load (no caching for now)
 function texture(gl, url) {
+  const cache = C(gl).tex; url += BUST;
   if (cache.has(url)) return cache.get(url);
   const p = new Promise(res => { const img = new Image(); img.onerror = () => res(null); img.onload = () => {
     const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
@@ -22,18 +25,16 @@ function texture(gl, url) {
   cache.set(url, p); return p;
 }
 const json = new Map();
-const getJson = url => json.get(url) || (json.set(url, fetch(url, { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)), json.get(url));
+const getJson = url => json.get(url) || (json.set(url, fetch(url, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)), json.get(url));
 
-// rig: public/rigs/<name>.json ; skin: public/skins/<id>.json — both resolve to {parts, gltex} (null if missing)
+// rig: public/rigs/<name>.json ; skin: public/skins/<id>.json — both resolve to {...data, gltex} for that context (null if missing)
 export async function loadRig(gl, name) {
   const r = await getJson(`rigs/${name}.json`); if (!r) return null;
-  if (r.tex && r.gltex === undefined) r.gltex = await texture(gl, `rigs/${r.tex}`);
-  return r;
+  return { ...r, gltex: r.tex ? await texture(gl, `rigs/${r.tex}`) : null };
 }
 export async function loadSkin(gl, id) {
   const s = await getJson(`skins/${id}.json`); if (!s) return null;
-  if (s.tex && s.gltex === undefined) s.gltex = await texture(gl, `skins/${s.tex}`);
-  return s;
+  return { ...s, gltex: s.tex ? await texture(gl, `skins/${s.tex}`) : null };
 }
 export const colorsOf = list => { const c = new Float32Array(21); list.forEach((v, i) => { if (i < 6) c.set([(v >> 16 & 255) / 255, (v >> 8 & 255) / 255, (v & 255) / 255], (i + 1) * 3); }); return c; };
 const NO_COLS = colorsOf([]);
@@ -66,9 +67,10 @@ export function drawRig(gl, rig, skins, anim, frame, x, y, scale, flip, cols = N
     const [p, t] = find(rig.nodes[node]); if (!p) continue;
     emit(p, t, [a, b, tx, c, d, ty], [(col & 255) / 127, (col >> 8 & 255) / 127, (col >> 16 & 255) / 127, (col >>> 24) / 127], 0);
   }
+  const cx = C(gl); let { prog, buf } = cx;
   if (!prog) {
     const sh = (ty, s) => { const o = gl.createShader(ty); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(o); return o; };
-    prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); buf = gl.createBuffer();
+    prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog); buf = gl.createBuffer(); Object.assign(cx, { prog, buf });
   }
   gl.useProgram(prog); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);

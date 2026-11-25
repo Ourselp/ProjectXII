@@ -23,7 +23,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   let id = 0; const pending = {};
   ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (pending[m.id]) { pending[m.id](m); delete pending[m.id]; } });
   const send = (method, params = {}) => new Promise(r => { pending[++id] = r; ws.send(JSON.stringify({ id, method, params })); });
-  await send('Page.enable');
+  await send('Page.enable'); await send('Runtime.enable'); await send('Log.enable');
+  ws.addEventListener('message', e => { const m = JSON.parse(e.data);
+    if (m.method === 'Runtime.exceptionThrown') console.log('EXCEPTION', m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
+    if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) console.log('CONSOLE', m.params.type, m.params.args.map(a => a.value ?? a.description).join(' '));
+    if (m.method === 'Log.entryAdded' && m.params.entry.level === 'error') console.log('LOG', m.params.entry.text, m.params.entry.url || ''); });
   await send('Page.navigate', { url });
   const t0 = Date.now();
   for (const w of waits.split(',').map(Number)) {
@@ -31,6 +35,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, userGesture: true, awaitPromise: true });
     console.log(`${w} ms:`, JSON.stringify(r.result?.result?.value ?? r.result?.exceptionDetails?.text));
     const shot = await send('Page.captureScreenshot', { format: 'png' });
+    if (process.env.RELOAD && w === +waits.split(',')[0]) { console.log('-- reload'); await send('Page.reload', {}); }
     fs.writeFileSync(`${out}_${w}.png`, Buffer.from(shot.result.data, 'base64'));
   }
   ws.close();
