@@ -3,21 +3,21 @@
 <meta http-equiv="Cache-Control" content="no-store">
 <title>projectZero</title>
 <style>
-/* own palette: night blue panels, teal accents, warm gold highlights */
-:root{--bg:#121a26f2;--bg2:#1b2636;--line:#2f4058;--teal:#38c9b4;--gold:#f2c14e;--text:#e9f0f7;--muted:#9fb0c3}
-html,body{margin:0;height:100%;overflow:hidden;background:#000;font:13px system-ui,sans-serif;color:var(--text)}
+/* client skin (public/ui/hud, from tools/extract/ui_skin.js): dark slate panels, lime green accents */
+:root{--bg:#262a2bf2;--bg2:#1a1d1e;--line:#4b5150;--teal:#b4d334;--gold:#e8c35a;--text:#ece9df;--muted:#a8a99f}
+*{scrollbar-color:#5d6360 #1a1d1e}html,body{margin:0;height:100%;overflow:hidden;background:#000;font:13px system-ui,sans-serif;color:var(--text)}
 canvas#c{display:block;width:100vw;height:calc(100vh - 118px)}
 button,input,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:3px 7px}
 button{cursor:pointer}button:hover{border-color:var(--teal)}
-.panel{background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 18px #000a}
+.panel{background:var(--bg);border:1px solid var(--line);border-radius:4px;box-shadow:0 6px 18px #000a}
 /* top left: where am I */
 #place{position:fixed;left:10px;top:10px;padding:6px 12px;pointer-events:none}
 #place b{color:var(--gold);font-size:14px}#place small{display:block;color:var(--muted)}
 #heroname{position:fixed;left:0;top:0;pointer-events:none;font-weight:600;color:#fff;text-shadow:0 0 3px #000,0 0 6px #000;white-space:nowrap}
 /* bottom banner: chat | stats | spells | menu */
 #banner{position:fixed;left:0;right:0;bottom:0;height:118px;display:grid;grid-template-columns:minmax(260px,1.2fr) auto minmax(300px,2fr) auto;gap:10px;
-  padding:8px 10px;box-sizing:border-box;background:linear-gradient(#18222f,#0e141c);border-top:2px solid var(--teal)}
-#xp{position:absolute;left:0;right:0;top:-6px;height:4px;background:#0009}#xp i{display:block;width:12%;height:100%;background:var(--gold)}
+  padding:8px 10px;box-sizing:border-box;background:linear-gradient(#2e3231,#1a1c1c);border-top:1px solid #5d6360}
+#xp{position:absolute;left:0;right:0;top:-6px;height:4px;background:#0009}#xp i{display:block;width:12%;height:100%;background:linear-gradient(#d4ee5a,#86a81c)}
 #chat{display:flex;flex-direction:column;min-width:0}
 #chatlog{flex:1;overflow-y:auto;font-size:12px;line-height:1.35;padding:2px 4px;background:#0006;border-radius:6px}
 #chatlog .info{color:#9fe3d8}#chatlog .map{color:var(--gold)}#chatlog .warn{color:#ff9f9f}
@@ -25,34 +25,43 @@ button{cursor:pointer}button:hover{border-color:var(--teal)}
 #core{display:flex;align-items:center;gap:8px}
 #core .portrait{width:62px;height:62px;border-radius:50%;object-fit:cover;background:#0006;border:2px solid var(--gold)}
 #core .who{display:flex;flex-direction:column;gap:2px;min-width:90px}.hero-name{font-weight:700;font-size:15px}.cls{color:var(--muted);font-size:12px;white-space:nowrap}
-.orb{display:grid;place-items:center;border-radius:50%;font-weight:700;text-align:center;line-height:1.05}
-.orb small{display:block;font-weight:400;opacity:.8;font-size:10px}
-#life{width:74px;height:74px;font-size:15px;background:radial-gradient(circle at 50% 30%,#ff7a6b,#8f2318);border:3px solid #ffb0a6}
-#ap,#mp{width:42px;height:42px;font-size:13px}
-#ap{background:radial-gradient(circle at 50% 30%,#7cc8ff,#1d4f86);border:2px solid #bfe2ff}
-#mp{background:radial-gradient(circle at 50% 30%,#7fe08a,#1f6b2b);border:2px solid #c3f2c9}
+.orb{position:relative;display:grid;place-items:center;font-weight:700;text-align:center;line-height:1.05;text-shadow:0 0 2px #000,0 1px 2px #000;background:center/100% no-repeat}
+.orb span{position:relative;z-index:1}.orb small{display:block;font-weight:400;opacity:.85;font-size:10px}
+/* life heart: background, red fill clipped to --hp (0..1), then shading and border on top */
+#life{width:84px;height:84px;font-size:15px;background-image:url(ui/hud/gaugeHeartBackground.png)}
+#life::before,#life::after{content:'';position:absolute;inset:0;background:center/100% no-repeat}
+#life::before{background-image:url(ui/hud/gaugeHeartFilledRed.png);clip-path:inset(calc(100% - var(--hp,1) * 100%) 0 0 0)}
+#life::after{background-image:url(ui/hud/gaugeHeartShadeEdge.png),url(ui/hud/gaugeHeartBorder.png)}
+#life:hover::after{background-image:url(ui/hud/gaugeHeartShadeEdge.png),url(ui/hud/gaugeHeartBorderHover.png)}
+#ap,#mp{width:46px;height:46px;font-size:14px}#ap small,#mp small{display:none}
+#ap{background-image:url(ui/hud/paCounter.png)}#mp{background-image:url(ui/hud/pmCounter.png)}
 #spellbar{display:grid;grid-template-columns:repeat(auto-fill,40px);grid-auto-rows:40px;gap:4px;align-content:center;overflow:hidden}
-#spellbar button,.spell button{position:relative;padding:0;width:40px;height:40px;overflow:hidden;background:#0b1118}
-#spellbar img,.spell img{width:100%;height:100%;display:block}
-kbd{position:absolute;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0 0 2px #000}
+#spellbar button,.spell button{position:relative;padding:3px;width:40px;height:40px;border:0;border-radius:6px;background:url(ui/hud/bg_spell_icon.png) center/100%}
+#spellbar button::after,.spell button::after{content:'';position:absolute;inset:0;background:url(ui/hud/slotSpell_silverM.png) center/100%}
+#spellbar button:hover::after,.spell button:hover::after{background-image:url(ui/hud/slotSpell_goldM.png)}
+#spellbar img,.spell img{width:100%;height:100%;display:block;border-radius:4px}
+kbd{position:absolute;z-index:1;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0 0 2px #000}
 .cast{animation:cast .5s}@keyframes cast{0%{box-shadow:0 0 0 0 var(--gold)}100%{box-shadow:0 0 0 10px #0000}}
 #menu{display:grid;grid-template-columns:repeat(4,44px);grid-auto-rows:44px;gap:5px;align-content:center}
-#menu button{padding:0;font-size:18px;display:grid;place-items:center}
-#menu button.on{border-color:var(--gold);background:#2a3a52}
+#menu button{padding:0;font-size:18px;display:grid;place-items:center;border:0;background:url(ui/hud/btn_transparent_normal.png) center/100%}
+#menu button:hover,#menu button.on{background-image:url(ui/hud/btn_transparent_over.png)}#menu button.on{outline:1px solid var(--teal)}
+#menu img{width:30px;height:30px;object-fit:contain}
 #tip{position:fixed;width:260px;padding:8px 10px;pointer-events:none;z-index:50}
 #tip b{color:var(--gold);display:block}#tip span{color:var(--muted);font-size:12px}#tip p{margin:6px 0 0}
 /* windows */
 .win{position:fixed;left:120px;top:70px;min-width:280px;max-height:calc(100vh - 200px);display:flex;flex-direction:column;z-index:20}
 .win[hidden]{display:none}
-.win h2{margin:0;padding:7px 12px;font-size:14px;display:flex;align-items:center;gap:8px;cursor:move;border-bottom:1px solid var(--line);color:var(--gold);user-select:none}
-.win h2 .x{margin-left:auto;padding:0 7px}
+.win h2{margin:0;padding:8px 12px;font-size:14px;display:flex;align-items:center;gap:8px;cursor:move;color:var(--teal);user-select:none;
+  background:url(ui/hud/window_separator_green_horizontal.png) bottom/100% 2px no-repeat,#1f2222}
+.win h2 .x{margin-left:auto;width:24px;height:24px;padding:0;border:0;font-size:0;background:url(ui/hud/btn_close_normal.png) center/100%;filter:brightness(2.6)}
+.win h2 .x:hover{background-image:url(ui/hud/btn_close_over.png)}.win h2 .x:active{background-image:url(ui/hud/btn_close_pressed.png)}
 .win .body{padding:10px 12px;overflow:auto}
 .form{display:grid;gap:6px}.form label{display:flex;justify-content:space-between;gap:8px;align-items:center}
 .cols{display:flex;gap:3px}.form input[type=color]{width:26px;height:22px;padding:0;border:0;background:none}
-.preview{width:200px;height:240px;background:radial-gradient(#2a3a52,#121a26);border-radius:8px;cursor:pointer}
+.preview{width:200px;height:240px;background:radial-gradient(#3a403f,#1a1d1e);border-radius:8px;cursor:pointer}
 .row{display:flex;gap:12px;align-items:flex-start}
 #bag{display:grid;grid-template-columns:repeat(6,38px);grid-auto-rows:38px;gap:4px;margin-top:8px}
-#bag div{background:#0b1118;border:1px solid var(--line);border-radius:5px}
+#bag div{background:url(ui/hud/bg_spell_icon.png) center/100%;border-radius:5px}
 .stats td{padding:3px 8px}.stats td:last-child{text-align:right;color:var(--gold)}
 .spell{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)}.spell p{margin:3px 0 0;color:var(--muted)}.spell span{color:var(--muted);font-size:12px}
 #spell-list{max-width:460px}
@@ -74,19 +83,19 @@ kbd{position:absolute;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0
   <div id="core">
     <img class="portrait" alt="">
     <div class="who"><span class="hero-name"></span><span class="cls"></span></div>
-    <div class="orb" id="life">55<small>/ 55</small></div>
-    <div style="display:grid;gap:4px"><div class="orb" id="ap">6<small>PA</small></div><div class="orb" id="mp">3<small>PM</small></div></div>
+    <div class="orb" id="life" title="Points de vie"><span>55<small>/ 55</small></span></div>
+    <div style="display:grid;gap:4px"><div class="orb" id="ap" title="Points d'action"><span>6<small>PA</small></span></div><div class="orb" id="mp" title="Points de mouvement"><span>3<small>PM</small></span></div></div>
   </div>
   <div id="spellbar"></div>
   <div id="menu">
-    <button data-win="stats" title="Caractéristiques (C)">📜</button>
-    <button data-win="spells" title="Sorts (S)">✨</button>
-    <button data-win="inventory" title="Inventaire (I)">🎒</button>
-    <button data-win="look" title="Apparence (A)">🎨</button>
-    <button data-win="map" title="Carte du monde (M)">🗺️</button>
+    <button data-win="stats" title="Caractéristiques (C)"><img src="ui/hud/character.png" alt=""></button>
+    <button data-win="spells" title="Sorts (S)"><img src="ui/hud/spells.png" alt=""></button>
+    <button data-win="inventory" title="Inventaire (I)"><img src="ui/hud/inventory_equipment.png" alt=""></button>
+    <button data-win="look" title="Apparence (A)"><img src="ui/hud/palette.png" alt=""></button>
+    <button data-win="map" title="Carte du monde (M)"><img src="ui/hud/map.png" alt=""></button>
     <button id="mute" title="Son"></button>
-    <button data-win="options" title="Options (O)">⚙️</button>
-    <button data-win="help" title="Aide">❔</button>
+    <button data-win="options" title="Options (O)"><img src="ui/hud/btnIcon_gear.png" alt=""></button>
+    <button data-win="help" title="Aide"><img src="ui/hud/btnIcon_question.png" alt=""></button>
   </div>
 </div>
 <div id="tip" class="panel" hidden></div>

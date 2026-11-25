@@ -9,12 +9,13 @@ img{max-width:140px;max-height:140px;background:repeating-conic-gradient(#555 0 
 <input id=q placeholder=filter autofocus oninput="for(const d of document.querySelectorAll('div'))d.hidden=!d.title.toLowerCase().includes(this.value.toLowerCase())">
 ${all.map(f => `<div title="${f}"><img loading=lazy src="${encodeURI(f)}"><br>${f}</div>`).join('')}`);
 // HUD pieces: life heart, AP/MP counters, spell bar, timeline, banner, entity gauges, HUD buttons
-const HUD = /^(gaugeHeart|hatchHeartt|paCounter|pmCounter|icon_p[avm]\.|tx_(lifePoints|actionPoints|movementPoints|health|spells)|btn_spell_|slotSpell_|bg_spell_icon|bg_lvl_spell|noSpellIcon|background_timeline_|border_(additional_)?turn_timeline|icon_arrow_timeline|timeIndicatorBg|backgroundBanner|borderBanner|BorderBgHeader|entityJauge|icon_hud_|chat\.|xp(_shadow)?\.|experience(_0)?\.|btn_transparent_|title_bar_parchment|window_separator_)/;
+const HUD = /^(gaugeHeart|hatchHeartt|paCounter|pmCounter|icon_p[avm]\.|tx_(lifePoints|actionPoints|movementPoints|health|spells)|btn_spell_|slotSpell_|bg_spell_icon|bg_lvl_spell|noSpellIcon|background_timeline_|border_(additional_)?turn_timeline|icon_arrow_timeline|timeIndicatorBg|backgroundBanner|borderBanner|BorderBgHeader|entityJauge|icon_hud_|chat\.|xp(_shadow)?\.|experience(_0)?\.|btn_transparent_|title_bar_parchment|window_separator_|btn_close_|bg_tab_|bg_dark\.|bg_modalCover|windowShadow|(character|spells|inventory_equipment|map|palette|btnIcon_gear|btnIcon_question)\.)/;
 fs.mkdirSync(O, { recursive: true });
 let n = 0;
 for (const f of all) {
   const b = path.basename(f);
   if (!HUD.test(b) || b.includes(' #')) continue; // ' #id' = duplicate from another bundle
+  if (f.startsWith('Texture2D/') && fs.existsSync(`${R}/Sprite/${b}`)) continue; // Sprite = cropped, Texture2D can be a bigger atlas
   fs.copyFileSync(`${R}/${f}`, `${O}/${b}`); n++;
 }
 console.log(`ui_skin: ${all.length} images in ${R}/index.html, ${n} HUD pieces -> ${O}`);

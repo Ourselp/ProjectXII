@@ -15,7 +15,7 @@ per-page-load `?v=` (index.html imports `game.js?v=<now>`, the other modules reu
 
 - Click a cell to move (run if the path is longer than 3 cells). Click beyond a map edge to leave that way: green arrow where the
   map has an exit on that side, forbidden sign where it doesn't.
-- HUD (own design, classic layout): place name top left; bottom banner = chat | "Chabou" portrait, life / AP / MP | class spell bar
+- HUD (classic layout, skinned with the client's own UI sprites: heart life gauge, AP star, MP diamond, spell slots, menu icons, window frames): place name top left; bottom banner = chat | "Chabou" portrait, life / AP / MP | class spell bar
   (hover for details, keys 1–0) | menu.
 - Windows (draggable, Esc closes): Caractéristiques (C), Sorts (S), Inventaire with equipment and preview (I), Apparence (A),
   Carte du monde (M: click a position to go there), Options (O: music / ambience volume, cell grid), Aide.
