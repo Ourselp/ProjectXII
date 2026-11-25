@@ -49,6 +49,12 @@ button,input,select{font:inherit;color:var(--text);background:#222a33;border:1px
 #chatlog{flex:1;overflow-y:auto;font-size:12px;line-height:1.35}
 #chatlog .info{color:#9fd3ff}#chatlog .map{color:#ffd27a}#chatlog .warn{color:#ff9f9f}
 #chat form{display:flex;margin-top:4px}#chat input{flex:1}
+/* world map */
+#wm{position:fixed;inset:50px 40px 40px;z-index:10;display:flex;flex-direction:column;padding:8px}
+#wm[hidden]{display:none}
+#wm header{display:flex;gap:10px;align-items:center;margin-bottom:6px}#wm header span{flex:1;opacity:.6;font-size:12px}
+#wm canvas{flex:1;width:100%;min-height:0;border-radius:6px;cursor:crosshair;touch-action:none}
+#wm .tip{position:absolute;padding:5px 8px;pointer-events:none;font-size:12px}#wm .tip b{color:var(--accent)}
 @media (max-width:1250px){#chat{display:none}}
 </style>
 </head><body><canvas id="c"></canvas>
@@ -56,6 +62,7 @@ button,input,select{font:inherit;color:var(--text);background:#222a33;border:1px
 <div id="top">
   <div id="info" class="panel">Chargement…</div><div id="spacer"></div>
   <form id="go"><input name="q" placeholder="x,y ou id de carte" title="Téléportation : coordonnées (ex. 5,-18) ou identifiant de carte"></form>
+  <button id="openmap" title="Carte du monde (M)">Carte</button>
   <button id="mute" title="Son"></button>
   <details id="look" class="panel"><summary>Personnage</summary><div class="f"></div></details>
 </div>
@@ -67,4 +74,5 @@ button,input,select{font:inherit;color:var(--text);background:#222a33;border:1px
   <div id="spells"></div>
 </div>
 <div id="tip" class="panel" hidden></div>
+<div id="wm" class="panel" hidden><header><b>Carte du monde</b><select></select><span>glisser pour déplacer · molette pour zoomer · clic pour s'y rendre</span><button class="close" title="Fermer (Échap)">✕</button></header><canvas></canvas><div class="tip panel" hidden></div></div>
 <script type="module" src="game.js"></script></body></html>

@@ -14,6 +14,7 @@ node tools/extract/fmod.js "$C/Audio/Banks/Desktop" extract/fmod_events.json   #
 node --max-old-space-size=8000 tools/extract/maps_build.js              # all maps + sprites (+ list of animated elements, sounds)
 node tools/extract/anim_gfx.js                                            # animated map elements -> rig list
 node --max-old-space-size=8000 tools/extract/rigs.js "$C"                # rigs (player + animated elements) and all skins
+node tools/extract/worldmap.js                                            # world map window data
 node tools/extract/looks.js                                               # character creator data
 [ -d extract/picto ] || { mkdir -p extract/picto_in; cp "$C/Picto/Spells/spell_assets_1x.bundle" "$C/Picto/UI/class_assets_.bundle" extract/picto_in/; $A extract/picto_in -m export -t sprite $V -g type -o extract/picto; }
 node tools/extract/ui.js                                                  # HUD: class spells, icons, portraits

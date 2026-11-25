@@ -2,6 +2,7 @@
 import { loadRig, drawRig } from './rig.js';
 import { setupLook, look } from './look.js';
 import { setupHud, setClass, chat, nameAt } from './hud.js';
+import { openWorldMap } from './worldmap.js';
 
 const cv = document.getElementById('c');
 const gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false });
@@ -161,7 +162,9 @@ function sideAt(wx, wy) {
 }
 // exits on a side: edge cells whose map-change bits point that way and whose neighbour exists
 const sideExits = side => map.nb[side] > 0 && mapIndex[map.nb[side]] ? map.cells.map((v, i) => i).filter(i => (map.cells[i] & 1) && exitSides(i).includes(side)) : [];
-const CURSOR = ['n-resize', 's-resize', 'w-resize', 'e-resize'];
+// exit cursors: green arrow (own SVG) pointing to the side (top, bottom, left, right)
+const arrow = deg => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><g transform="rotate(${deg} 16 16)"><polygon points="16,3 29,16 21,16 21,29 11,29 11,16 3,16" fill="#46d64f" stroke="#0a3a10" stroke-width="2" stroke-linejoin="round"/></g></svg>`)}") 16 16, pointer`;
+const CURSOR = [arrow(0), arrow(180), arrow(270), arrow(90)];
 cv.addEventListener('mousemove', e => {
   if (!map) return;
   const [wx, wy] = toWorld(e), side = sideAt(wx, wy);
@@ -270,6 +273,9 @@ const q = new URLSearchParams(location.search);
 await setupHud();
 addEventListener('look', e => setClass(e.detail.breed, e.detail.gender));
 [mapIndex] = await Promise.all([fetch('maps/index.json', { cache: 'no-cache' }).then(r => r.json()), setupLook(gl)]);
+const openMap = () => openWorldMap(map.id, mapIndex, id => enterMap(id));
+document.getElementById('openmap').onclick = openMap;
+addEventListener('keydown', e => { if ((e.key === 'm' || e.key === 'M') && e.target.tagName !== 'INPUT') { const w = document.getElementById('wm'); w.hidden ? openMap() : (w.hidden = true); } });
 document.getElementById('say').addEventListener('submit', e => { e.preventDefault(); const t = e.target.t.value.trim(); if (t) chat(`Chabou : ${t}`); e.target.t.value = ''; });
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);

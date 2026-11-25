@@ -38,6 +38,7 @@ Tools to download into `tools/bin/` (git-ignored):
 | `fmod.js` | FMOD event GUID → waveforms index (`extract/fmod_events.json`) |
 | `audio.js` | music/ambience of every map → `public/audio/*.ogg` + `index.json` (event → files) |
 | `anim_gfx.js`, `rigs.js` | animated map elements + player rigs → `public/rigs/`, all skins → `public/skins/` |
+| `worldmap.js` | world map window → `public/data/world.json`: per world (`MapsInformation.worldMap`), one map per position (first listed in `MapsCoordinatesDataRoot`) |
 | `looks.js` | character creator data → `public/data/looks.json` |
 | `ui.js` | HUD: class spells (name, icon `Picto/Spells` `sort_<iconId>`, AP, range, description) → `public/data/spells.json`, portraits `Head_<bodySkin>` → `public/ui/` |
 
