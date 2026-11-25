@@ -83,12 +83,12 @@ function sprite([g, x, y, scx, scy, rot, col], fx, i) {
   const ph = ((x * 12.9898 + y * 78.233) * 43.7585) % TAU; // per-element phase from its position: lights / leaves out of sync
   let w = T.w * scx, h = T.h * scy;
   if (fx) {
-    if (fx.t) { const k = fx.t[4] + fx.t[3] * Math.sin(TAU * fx.t[2] * time + ph); x += fx.t[0] * k; y += fx.t[1] * k; }
-    if (fx.s) { const k = fx.s[3] * Math.sin(TAU * fx.s[2] * time + ph); w *= 1 + k * fx.s[0]; h *= 1 + k * fx.s[1]; }
-    if (fx.r) { const d = fx.r[4] + fx.r[3] * Math.sin(TAU * fx.r[2] * time + ph), a = d * Math.PI / 180;
+    if (fx.t) { const k = fx.t[4] + fx.t[3] * Math.sin(fx.t[2] * time + ph); x += fx.t[0] * k; y += fx.t[1] * k; }
+    if (fx.s) { const k = fx.s[3] * Math.sin(fx.s[2] * time + ph); w *= 1 + k * fx.s[0]; h *= 1 + k * fx.s[1]; }
+    if (fx.r) { const d = fx.r[4] + fx.r[3] * Math.sin(fx.r[2] * time + ph), a = d * Math.PI / 180;
       // rotate around the shader's rotation centre (element-local px, y up)
       const cx = fx.r[0] * scx, cy = fx.r[1] * scy; x += cx - (cx * Math.cos(a) - cy * Math.sin(a)); y += cy - (cx * Math.sin(a) + cy * Math.cos(a)); rot += d; }
-    if (fx.c) { const k = (1 + Math.sin(TAU * fx.c[1] * time + ph)) / 2, f = fx.c[0] >>> 0;
+    if (fx.c) { const k = (1 + Math.sin(fx.c[1] * time + ph)) / 2, f = fx.c[0] >>> 0;
       col = [24, 16, 8, 0].reduce((acc, s) => acc + Math.round((col >>> s & 255) * (1 - k) + (f >>> s & 255) * k) * 2 ** s, 0); }
     if (fx.d) col = (Math.round((col >>> 24) * Math.max(0, 1 - fx.d) ** 2) * 2 ** 24 + (col & 0xffffff)) >>> 0; // dissolve: ~ share of noise above alphaClip
     if (fx.w) gl.uniform3f(U.wind, -(fx.w[0] * W) / Math.abs(T.h * scy), fx.w[1] * fx.w[2] / 86 * 6 / Math.abs(T.w * scx), ph);
@@ -512,7 +512,8 @@ async function spawnMonsters(m) {
   const sub = mapIndex[m.id]?.[2], indoor = mapIndex[m.id]?.[3] === -1 && !MON.dungeon.includes(sub); // no monsters inside houses
   const ids = indoor ? [] : MON.sub[sub] || [], rnd = rng(m.id), list = [];
   const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell && npcs.every(n => Math.abs(cellXY(i)[0] - n.x) + Math.abs(cellXY(i)[1] - n.y) > W * 2));
-  const member = id => { const [name, , , , , lo, hi] = MON.mon[id]; return { id, name, lvl: lo + Math.floor(rnd() * (hi - lo + 1)) }; };
+  // a monster of the group; 1 in 40 is its archmonster when it has one (MON.archi), like the game's rare spawns
+  const member = id => { if (MON.archi?.[id] && rnd() < 1 / 40) id = MON.archi[id]; const [name, , , , , lo, hi] = MON.mon[id]; return { id, name, lvl: lo + Math.floor(rnd() * (hi - lo + 1)) }; };
   const place = members => {
     const spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 3)); if (!spots.length) return;
     const cell = spots[Math.floor(rnd() * spots.length)], [x, y] = cellXY(cell);
@@ -520,7 +521,9 @@ async function spawnMonsters(m) {
     list.push({ members, id: members[0].id, cell, x, y, dir: [1, 3, 5, 7][Math.floor(rnd() * 4)], path: [], t: rnd() * 5, wait: 2 + rnd() * 8, rnd });
   };
   const between = (a, b) => a + Math.floor(rnd() * (b - a + 1));
-  if (ids.length) {
+  const bosses = (MON.bossRoom?.[m.id] || []).filter(id => MON.mon[id]?.[7] & 4); // last room of a dungeon: its boss, escorted
+  if (bosses.length) place([member(bosses[Math.floor(rnd() * bosses.length)]), ...Array.from({ length: between(2, 6) }, () => ids.length ? member(ids[Math.floor(rnd() * ids.length)]) : null).filter(Boolean)]);
+  else if (ids.length) {
     const sizes = MON.dungeon.includes(sub) ? [between(4, 8)] : [between(1, 3), between(3, 5), between(5, 8)];
     if (sizes.length > 1) { const r = rnd(); if (r < .25) sizes.pop(); else if (r > .8) sizes.push(between(1, 8)); }
     for (const n of sizes) place(Array.from({ length: n }, () => member(ids[Math.floor(rnd() * ids.length)])));
