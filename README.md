@@ -17,8 +17,13 @@ per-page-load `?v=` (index.html imports `game.js?v=<now>`, the other modules reu
   map has an exit on that side, forbidden sign where it doesn't.
 - HUD (classic layout, skinned with the client's own UI sprites: heart life gauge, AP star, MP diamond, spell slots, menu icons, window frames): place name top left; bottom banner = chat | "Chabou" portrait, life / AP / MP | class spell bar
   (hover for details, keys 1–0) | menu.
-- Windows (draggable, Esc closes): Caractéristiques (C), Sorts (S), Inventaire with equipment and preview (I), Apparence (A),
-  Carte du monde (M: click a position to go there), Options (O: music / ambience volume, cell grid), Aide.
+- Menu (banner, client menu icons): the client's own windows, converted from its UI Toolkit layouts (draggable by the title, Esc closes):
+  Caractéristiques (C, our hero's name / class / AP / MP), Sorts (S, the class spells in the grimoire), Inventaire (I, hero on the pedestal),
+  Quêtes (Q), Succès (U), Métiers (J), Encyclopédie (B), Amis (F), Guilde (G), Alliance, Alignement, Montures (D), Compagnons, Almanax,
+  Recherche de groupe, Cosmétiques, Préréglages, Guide, Boutique. Most are empty shells: in the client the server fills them.
+  Our own windows: Carte du monde (M: click a position to go there), Apparence (A: class, head, colours, equipment),
+  Options (O: music / ambience volume, cell grid), Aide (H).
+- `uitk.html`: every one of the client's 699 layouts (windows, tooltips, popups, list rows), filterable.
 - Chat: Enter to type, `/tp 5,-18` or `/tp <map id>` to teleport.
 - The URL keeps the current map (`?map=…&cell=…`); `&look={"breed":9,"gender":1,…}` overrides the character.
   `charview.html` previews the character in every direction.

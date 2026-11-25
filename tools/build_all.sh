@@ -23,4 +23,7 @@ node tools/extract/looks.js                                               # char
 node tools/extract/ui.js                                                  # HUD: class spells, icons, portraits
 [ -d extract/ui_raw ] || { mkdir -p extract/ui_in; cp "$S"/aa/StandaloneWindows64/{ui,icons_,ornaments_,spriteassets_,tss_,figs_}*.bundle extract/ui_in/; $A extract/ui_in -m export -t sprite,tex2d $V -g type -o extract/ui_raw; }
 node tools/extract/ui_skin.js                                             # client UI skin: gallery + HUD pieces -> public/ui/hud
+[ -d extract/raw_uxml ] || { mkdir -p extract/uxml_in; cp "$S"/aa/StandaloneWindows64/*.bundle extract/uxml_in/; $A extract/uxml_in -m extract -o extract/raw_uxml; }
+[ -d extract/ui_fonts ] || { mkdir -p extract/uxml_in; cp "$S"/aa/StandaloneWindows64/*.bundle extract/uxml_in/; $A extract/uxml_in -m export -t font $V -g none -o extract/ui_fonts; }
+node tools/extract/uitk.js                                                # client menus (UI Toolkit UXML/USS) -> layouts HTML + uitk-client.css
 node tools/extract/audio.js "$C/Audio/Banks/Desktop"                      # map music / ambience -> ogg

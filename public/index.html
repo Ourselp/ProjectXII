@@ -42,10 +42,11 @@ button{cursor:pointer}button:hover{border-color:var(--teal)}
 #spellbar img,.spell img{width:100%;height:100%;display:block;border-radius:4px}
 kbd{position:absolute;z-index:1;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0 0 2px #000}
 .cast{animation:cast .5s}@keyframes cast{0%{box-shadow:0 0 0 0 var(--gold)}100%{box-shadow:0 0 0 10px #0000}}
-#menu{display:grid;grid-template-columns:repeat(4,44px);grid-auto-rows:44px;gap:5px;align-content:center}
+#menu{display:grid;grid-template-columns:repeat(8,32px);grid-auto-rows:32px;gap:4px;align-content:center}
 #menu button{padding:0;font-size:18px;display:grid;place-items:center;border:0;background:url(ui/hud/btn_transparent_normal.png) center/100%}
 #menu button:hover,#menu button.on{background-image:url(ui/hud/btn_transparent_over.png)}#menu button.on{outline:1px solid var(--teal)}
-#menu img{width:30px;height:30px;object-fit:contain}
+#menu img{width:26px;height:26px;object-fit:contain}
+canvas.inv3d{position:absolute;left:50%;top:120px;width:300px;height:380px;margin-left:-150px;background:none;z-index:1}
 #tip{position:fixed;width:260px;padding:8px 10px;pointer-events:none;z-index:50}
 #tip b{color:var(--gold);display:block}#tip span{color:var(--muted);font-size:12px}#tip p{margin:6px 0 0}
 /* windows */
@@ -88,32 +89,16 @@ kbd{position:absolute;z-index:1;left:2px;bottom:1px;font-size:9px;color:#fff;tex
   </div>
   <div id="spellbar"></div>
   <div id="menu">
-    <button data-win="stats" title="Caractéristiques (C)"><img src="ui/hud/character.png" alt=""></button>
-    <button data-win="spells" title="Sorts (S)"><img src="ui/hud/spells.png" alt=""></button>
-    <button data-win="inventory" title="Inventaire (I)"><img src="ui/hud/inventory_equipment.png" alt=""></button>
-    <button data-win="look" title="Apparence (A)"><img src="ui/hud/palette.png" alt=""></button>
-    <button data-win="map" title="Carte du monde (M)"><img src="ui/hud/map.png" alt=""></button>
     <button id="mute" title="Son"></button>
-    <button data-win="options" title="Options (O)"><img src="ui/hud/btnIcon_gear.png" alt=""></button>
-    <button data-win="help" title="Aide"><img src="ui/hud/btnIcon_question.png" alt=""></button>
   </div>
 </div>
 <div id="tip" class="panel" hidden></div>
 
-<div id="win-stats" class="win panel" hidden><h2>Caractéristiques<button class="x">✕</button></h2><div class="body">
-  <div class="row"><img class="portrait" alt="" style="width:64px;height:64px;border-radius:50%;border:2px solid var(--gold)"><div><div class="hero-name"></div><div class="cls"></div></div></div>
-  <table class="stats"><tr><td>Points de vie</td><td>55 / 55</td></tr><tr><td>Points d'action</td><td>6</td></tr><tr><td>Points de mouvement</td><td>3</td></tr>
-  <tr><td>Vitalité</td><td>0</td></tr><tr><td>Sagesse</td><td>0</td></tr><tr><td>Force</td><td>0</td></tr><tr><td>Intelligence</td><td>0</td></tr><tr><td>Chance</td><td>0</td></tr><tr><td>Agilité</td><td>0</td></tr>
-  <tr><td>Expérience</td><td>0 / 110</td></tr><tr><td>Kamas</td><td>0</td></tr></table></div></div>
 
-<div id="win-spells" class="win panel" hidden><h2>Sorts<button class="x">✕</button></h2><div class="body"><div id="spell-list"></div></div></div>
 
-<div id="win-inventory" class="win panel" hidden style="left:auto;right:20px"><h2>Inventaire<button class="x">✕</button></h2><div class="body"><div class="row">
-  <div><canvas class="preview" width="200" height="240" title="Cliquer pour tourner"></canvas><form id="equip-form" class="form" style="margin-top:6px"></form></div>
-  <div><b>Objets</b> <span style="color:var(--muted)">· 0 kamas</span><div id="bag"></div></div></div></div></div>
 
 <div id="win-look" class="win panel" hidden><h2>Apparence<button class="x">✕</button></h2><div class="body"><div class="row">
-  <canvas class="preview" width="200" height="240" title="Cliquer pour tourner"></canvas><form id="look-form" class="form"></form></div></div></div>
+  <canvas class="preview" width="200" height="240" title="Cliquer pour tourner"></canvas><form id="look-form" class="form"></form><form id="equip-form" class="form"></form></div></div></div>
 
 <div id="win-map" class="win panel" hidden><h2>Carte du monde<button class="x">✕</button></h2><div class="body">
   <div id="wm-tools"><select id="wm-world"></select><form id="go"><input name="q" placeholder="x,y ou id de carte"></form><span>glisser · molette · clic pour s'y rendre</span></div>
@@ -126,9 +111,8 @@ kbd{position:absolute;z-index:1;left:2px;bottom:1px;font-size:9px;color:#fff;tex
 
 <div id="win-help" class="win panel" hidden><h2>Aide<button class="x">✕</button></h2><div class="body" style="max-width:380px;line-height:1.5">
   Clic sur une case : se déplacer (course au-delà de 3 cases).<br>Clic au-delà d'un bord : changer de carte (flèche verte = sortie possible).<br>
-  Raccourcis : C caractéristiques, S sorts, I inventaire, A apparence, M carte, O options, 1–0 sorts, Entrée chat, Échap fermer.<br>
+  Raccourcis : C caractéristiques, S sorts, I inventaire, Q quêtes, U succès, J métiers, B encyclopédie, F amis, G guilde, D montures, A apparence, M carte, O options, H aide, 1–0 sorts, Entrée chat, Échap fermer.<br>
   Commande : <code>/tp 5,-18</code> ou <code>/tp &lt;id de carte&gt;</code>.</div></div>
 
-<script>document.querySelector('#bag').innerHTML = '<div></div>'.repeat(36);
-  import(`./game.js?v=${Date.now()}`); // no caching for now: every module is fetched fresh on each load</script>
+<script>import(`./game.js?v=${Date.now()}`); // no caching for now: every module is fetched fresh on each load</script>
 </body></html>

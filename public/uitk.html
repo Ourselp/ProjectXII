@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Menus du client (UI Toolkit)</title>
+<style>
+body{margin:0;height:100vh;background:#111 radial-gradient(#2a3a2a,#0b0d10);font:13px system-ui;color:#ddd}
+#list{position:fixed;left:0;top:0;bottom:0;width:220px;overflow:auto;background:#000c;padding:6px;z-index:9999;box-sizing:border-box}#list input{width:100%;box-sizing:border-box;margin-bottom:6px}
+#list a{display:block;padding:2px 4px;color:#bbb;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#list a:hover,#list a.on{background:#334;color:#fff}
+</style></head><body>
+<div id="list"><input placeholder="filtrer" autofocus></div>
+<script type="module">
+// every layout of the client through the game's runtime (uitk.js); ?l=<name> opens one
+const ui = await import(`./uitk.js?v=${Date.now()}`);
+const names = await fetch('ui/uitk/layouts/index.json', { cache: 'no-store' }).then(r => r.json());
+const list = document.querySelector('#list');
+list.insertAdjacentHTML('beforeend', names.map(n => `<a href="?l=${n}">${n}</a>`).join(''));
+list.querySelector('input').oninput = e => list.querySelectorAll('a').forEach(a => a.hidden = !a.textContent.toLowerCase().includes(e.target.value.toLowerCase()));
+function show(n) { ui.hideAll(); ui.show(n); list.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.textContent === n)); document.title = n; }
+list.onclick = e => { const a = e.target.closest('a'); if (!a) return; e.preventDefault(); history.replaceState(0, '', a.href); show(a.textContent); };
+show(new URLSearchParams(location.search).get('l') || 'characterSheetUi');
+</script></body></html>

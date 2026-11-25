@@ -42,6 +42,27 @@ Tools to download into `tools/bin/` (git-ignored):
 | `looks.js` | character creator data → `public/data/looks.json` |
 | `ui_skin.js` | client UI skin (`aa/StandaloneWindows64/ui*`, `icons_*`, `ornaments_*`… exported to `extract/ui_raw/`, ~9 000 images): filterable gallery `extract/ui_raw/index.html`, HUD pieces (heart gauge, AP/MP counters, spell slots/buttons, timeline, banner, entity gauges, HUD buttons) → `public/ui/hud/` |
 | `ui.js` | HUD: class spells (name, icon `Picto/Spells` `sort_<iconId>`, AP, range, description) → `public/data/spells.json`, portraits `Head_<bodySkin>` → `public/ui/` |
+| `uitk.js` | client menus: every `aa/StandaloneWindows64` bundle unpacked to `extract/raw_uxml/` (+ fonts → `extract/ui_fonts/`, Lexend): 699 UXML layouts → `public/ui/uitk/layouts/<name>.html`, USS → `public/uitk-client.css`, images → `public/ui/uitk/img/`. Runtime: `public/uitk.js` (+ hand CSS for Dofus' code-built controls: `public/uitk-controls.css`); gallery `public/uitk.html` |
+
+**Menus (Unity UI Toolkit).** Dofus 3's UI is UI Toolkit: `VisualTreeAsset` (UXML) and `StyleSheet` (USS) MonoBehaviours in
+`uielements_assets_all` (themes in `tss_assets_all`). Unity 6 serialisation, read with `unityread.js` (SerializeReference tree;
+parent links are back-references, kept as `{$rid}`):
+- UXML: `m_VisualTree` = tree of `{m_FullTypeName, m_Properties [name, value], m_Classes, m_RuleIndex, m_Children}`; inline styles are
+  rules of the `inlineSheet` StyleSheet (`m_RuleIndex`); templates via `m_Usings` (alias → layout) and `TemplateAsset.m_TemplateAlias`.
+  Many Dofus controls (`EntityMainStats`, `EquipmentComponentCharacter`…) load the layout named like them: expanded the same way.
+  Dofus' Figma controls (`WindowFigma`, `DofusButtonCustom`, `DofusIcon`, `Divider`, `ExtendedProgressBar*`, `Slot`…) build their parts
+  in C#: rebuilt from their attributes (`title`, `img-url`, `icon`, `main-style`, `value`…), icons looked up by sprite name.
+  `InlineXmlGrid uxml-path=…` = list filled at runtime from that item layout (`<template data-item>`).
+- USS: `m_Rules[] = {m_ComplexSelectors[{m_Selectors[{m_Parts[{m_Value, m_Type}], m_PreviousRelationship}]}], m_Properties[{m_Id, m_CustomName, m_Values[{m_ValueType, valueIndex}]}]}`;
+  values index the sheet's `floats / dimensions {unit, value} / colors / strings / assets (PPtr) / scalableImages`.
+  `m_Id` = StylePropertyId = `group << 16 | index` (UnityCsReference 6000.3 `StylePropertyEnums.cs`, table in `uitk.js`); `-1` = custom `--var`.
+  Value types (this build, with ResourcePath): 1 keyword, 2 float, 3 dimension, 4 colour, 5 resource path, 6 asset, 7 enum, 8 variable,
+  9 string, 10 function (`valueIndex` = StyleValueFunction: 1 `var`, 3 `linear-gradient`…, then an argument count), 11 comma, 12 scalable image.
+  Selector parts: 1 `*`, 2 type (→ `[data-t=…]`), 3 class, 4 pseudo-class, 6 `#name`.
+- Unity specifics mapped to CSS: every element a column flexbox (border-box, `flex-shrink: 1`); `-unity-text-align` → `text-align` +
+  `--uta-v` (inherited) for the vertical part; sprite borders / `-unity-slice-*` → `border-image`; `-unity-background-image-tint-color`
+  → a `::before` with the tint colour masked by the image (`--u-tint`, `--u-img`: Dofus has its own `--tint`); urls all relative to
+  `public/` (a url inside `var()` resolves against the sheet that uses it). Scaling: `PanelSettings` reference 1920×1080, shrink, ×0.9.
 
 ## Formats worked out
 

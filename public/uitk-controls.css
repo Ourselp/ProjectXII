@@ -1,0 +1,70 @@
+/* Dofus' own UI Toolkit controls build their parts in C#; tools/extract/uitk.js rebuilds them as plain markup, styled here
+   with the theme variables (Standard theme: --background_*, --highlight_*, --buttons_*) and client sprites from ui/uitk/img. */
+.uitk-root [data-t] { --i: none; }
+/* window: dark panel, header with menu icon, title, close */
+.uitk-root .wf { background: var(--background_dark97); border-radius: 12px; box-shadow: 0 8px 30px #000c, inset 0 0 0 1px #ffffff14; min-width: 320px; }
+.uitk-root .wf-head { flex-direction: row; align-items: center; height: 48px; flex-shrink: 0; padding: 0 12px 0 14px; gap: 10px; cursor: move; border-radius: 12px 12px 0 0;
+  background: linear-gradient(var(--header_background), transparent); border-bottom: 1px solid var(--highlight_secondary25); }
+.uitk-root .wf--secondary .wf-head { background: none; }
+.uitk-root .wf-icon { width: 32px; height: 32px; object-fit: contain; }
+.uitk-root .wf-title { flex-grow: 1; font-family: "Lexend-SemiBold"; font-size: 17px; color: #fff; text-shadow: 0 2px 2px #0008; }
+.uitk-root .wf-btn { width: 26px; height: 26px; border-radius: 6px; cursor: pointer; background: var(--i) center/16px no-repeat, var(--buttons_buttonSecondary); }
+.uitk-root .wf-close { --i: url(ui/uitk/img/cross.png); }
+.uitk-root .wf-btn:hover { background-color: var(--buttons_buttonSecondaryHover); }
+.uitk-root .wf-body { flex-grow: 1; }
+/* buttons */
+.uitk-root .dbtn { flex-direction: row; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 6px; cursor: pointer; flex-shrink: 0;
+  background-color: var(--buttons_buttonPrimary); font-family: "Lexend-SemiBold"; }
+.uitk-root .dbtn:hover { background-color: var(--buttons_buttonPrimaryHover); }
+.uitk-root .dbtn:active { background-color: var(--buttons_buttonPrimaryPressed); }
+.uitk-root .dbtn--secondary, .uitk-root .dbtn--navigation, .uitk-root .dbtn--favorite { background-color: var(--buttons_buttonSecondary); }
+.uitk-root .dbtn--secondary:hover, .uitk-root .dbtn--navigation:hover { background-color: var(--buttons_buttonSecondaryHover); }
+.uitk-root .dbtn--tertiary, .uitk-root .dbtn--link, .uitk-root .dbtn--document { background-color: transparent; box-shadow: inset 0 0 0 1px var(--highlight_secondary35); }
+.uitk-root .dbtn--link { box-shadow: none; text-decoration: underline; color: var(--highlight_primary100); }
+.uitk-root .dbtn--small { height: 28px; padding: 0 10px; font-size: 11px; }
+.uitk-root .dbtn--large, .uitk-root .dbtn--xLarge { height: 44px; }
+.uitk-root .dbtn--icon { width: 36px; padding: 0; }
+.uitk-root .dbtn--small.dbtn--icon { width: 28px; }
+.uitk-root .dbtn--xLarge.dbtn--icon, .uitk-root .dbtn--xxLarge.dbtn--icon { width: 48px; height: 48px; }
+.uitk-root .dbtn-icon { width: 20px; height: 20px; flex-shrink: 0; background: var(--i) center/contain no-repeat; }
+.uitk-root .dbtn--xLarge .dbtn-icon, .uitk-root .dbtn--xxLarge .dbtn-icon { width: 30px; height: 30px; }
+.uitk-root .dbtn-label { white-space: nowrap; }
+.uitk-root [data-t="DofusToggleButtonGroupCustom"], .uitk-root [data-t="DofusTabGroup"] { flex-direction: row; gap: 4px; }
+.uitk-root .dtab { flex-direction: row; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; background: var(--buttons_buttonSecondary); }
+.uitk-root .dtab.is-checked, .uitk-root .dtab:hover { background: var(--background_medium100); box-shadow: inset 0 -2px var(--highlight_primary100); }
+/* icons, dividers, gauges */
+.uitk-root .dicon { width: 20px; height: 20px; flex-shrink: 0; background: var(--i) center/contain no-repeat; }
+.uitk-root .divider { flex-direction: row; align-items: center; gap: 6px; height: 14px; flex-shrink: 0; margin: 6px 0; }
+.uitk-root .divider i { flex-grow: 1; height: 1px; background: var(--highlight_secondary35); }
+.uitk-root .divider img { width: 12px; height: 12px; opacity: .8; }
+.uitk-root .divider--v { flex-direction: column; width: 14px; height: auto; margin: 0 6px; }
+.uitk-root .divider--v i { width: 1px; height: auto; }
+.uitk-root .pb { height: 14px; border-radius: 7px; background: #0007; box-shadow: inset 0 0 0 1px #ffffff1a; overflow: hidden; flex-shrink: 0; }
+.uitk-root .pb--small { height: 8px; }
+.uitk-root .pb-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--highlight_primary100); border-radius: inherit; }
+.uitk-root .pb--green .pb-fill { background: #5fd35f; }
+/* slots */
+.uitk-root .slot { width: 48px; height: 48px; flex-shrink: 0; border-radius: 6px; background: var(--i) center/60% no-repeat, #0005; box-shadow: inset 0 0 0 1px var(--highlight_secondary25); }
+.uitk-root .slot--small { width: 40px; height: 40px; }
+.uitk-root .slot--xSmall { width: 36px; height: 36px; }
+.uitk-root .slot--large { width: 64px; height: 64px; }
+.uitk-root .slot:hover { box-shadow: inset 0 0 0 1px var(--highlight_primary80); }
+.uitk-root .slot-icon { position: absolute; inset: 20%; background: var(--i) center/contain no-repeat; opacity: .35; }
+.uitk-root .slotgrid { flex-direction: row; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+/* fields */
+.uitk-root .dcheck { flex-direction: row; align-items: center; gap: 8px; cursor: pointer; }
+.uitk-root .dcheck-box { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; box-shadow: inset 0 0 0 1px var(--highlight_secondary65); background: #0005; }
+.uitk-root .dcheck.is-checked .dcheck-box { background: url(ui/uitk/img/checkboxActive.png) center/contain no-repeat, var(--buttons_buttonPrimary); }
+.uitk-root .dinput { height: 32px; flex-direction: row; align-items: center; padding: 0 10px; border-radius: 6px; background: #0006; box-shadow: inset 0 0 0 1px var(--highlight_secondary25); }
+.uitk-root .dinput input { all: unset; flex-grow: 1; font: inherit; color: #fff; }
+.uitk-root .ddrop { padding-right: 28px; background: url(ui/uitk/img/chevronBottom.png) right 8px center/12px no-repeat, #0006; }
+.uitk-root .sheader { padding: 6px 10px; background: var(--header_background); font-family: "Lexend-SemiBold"; }
+.uitk-root .thead { padding: 4px 8px; color: var(--highlight_secondary80); font-size: 11px; }
+.uitk-root .dtag { padding: 2px 8px; border-radius: 10px; background: var(--highlight_secondary25); font-size: 11px; align-self: flex-start; }
+.uitk-root .unity-scroll-view { overflow: auto; }
+.uitk-root .unity-text-element { color: inherit; }
+/* glows tinted by code with the class colour: theme colour here */
+.uitk-root .themeColor, .uitk-root .glowColor { --u-tint: var(--highlight_secondary35); background-image: none !important; }
+.uitk-root .glowColor { --u-tint: var(--highlight_secondary65); }
+.uitk-root .themeColor::before, .uitk-root .glowColor::before { content: ''; position: absolute; inset: 0; pointer-events: none; --u-img: inherit; --u-tint: inherit; background: var(--u-tint);
+  -webkit-mask: var(--u-img) center/100% 100% no-repeat; mask: var(--u-img) center/100% 100% no-repeat; }

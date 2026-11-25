@@ -89,12 +89,16 @@ function readValue(r, nd, ctx) {
 const rstr = r => { const n = r.i32(); const s = r.b.toString('utf8', r.p, r.p + n); r.p += n; r.align(); return s; };
 
 // replace {rid: N} placeholders with the referenced objects, drop the registry
-function resolve(v, reg) {
-  if (Array.isArray(v)) return v.map(x => resolve(x, reg));
+function resolve(v, reg, seen = new Set()) {
+  if (Array.isArray(v)) return v.map(x => resolve(x, reg, seen));
   if (v && typeof v === 'object') {
     const ks = Object.keys(v);
-    if (ks.length === 1 && ks[0] === 'rid') return v.rid in reg ? resolve(reg[v.rid], reg) : null;
-    const o = {}; for (const key of ks) o[key] = resolve(v[key], reg); return o;
+    if (ks.length === 1 && ks[0] === 'rid') {
+      if (!(v.rid in reg)) return null;
+      if (seen.has(v.rid)) return { $rid: v.rid }; // back-reference (parent links): keep the id, don't recurse
+      seen.add(v.rid); const o = resolve(reg[v.rid], reg, seen); seen.delete(v.rid); return o;
+    }
+    const o = {}; for (const key of ks) o[key] = resolve(v[key], reg, seen); return o;
   }
   return v;
 }
@@ -108,7 +112,7 @@ function readFile(file, classFilter = 114) {
   const types = []; for (let i = r.i32(); i > 0; i--) types.push(readType(r, false, tree));
   const objs = []; for (let i = r.i32(); i > 0; i--) { r.align(); objs.push({ pathId: big(r.i64()), start: Number(r.i64()), size: r.u32(), type: r.i32() }); }
   for (let i = r.i32(); i > 0; i--) { r.i32(); r.align(); r.i64(); }
-  for (let i = r.i32(); i > 0; i--) { r.cstr(); r.bytes(16); r.i32(); r.cstr(); }
+  const externals = []; for (let i = r.i32(); i > 0; i--) { r.cstr(); r.bytes(16); r.i32(); externals.push(r.cstr()); }
   const refTypes = []; for (let i = r.i32(); i > 0; i--) refTypes.push(readType(r, true, tree));
   const ctx = { refTypes }, out = [];
   for (const o of objs) {
@@ -121,6 +125,7 @@ function readFile(file, classFilter = 114) {
     if (regKey) { const reg = value[regKey]; delete value[regKey]; value = resolve(value, reg); }
     out.push({ pathId: o.pathId, classId: t.classId, name: value.m_Name, value });
   }
+  out.externals = externals; // m_FileID n>0 -> externals[n-1] ("archive:/CAB-…/CAB-…")
   return out;
 }
 
