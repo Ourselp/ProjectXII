@@ -1,7 +1,23 @@
 <!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>projectZero · Astrub</title>
-<style>html,body{margin:0;height:100%;overflow:hidden;background:#000}canvas{display:block;width:100vw;height:100vh;cursor:pointer}
-#info{position:fixed;left:8px;top:6px;color:#fff;font:13px sans-serif;text-shadow:0 0 3px #000;pointer-events:none}</style>
-</head><body><canvas id="c"></canvas><div id="info">Chargement…</div>
+<title>projectZero</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font:13px sans-serif;color:#fff}
+canvas{display:block;width:100vw;height:100vh;cursor:pointer}
+#hud{position:fixed;left:8px;top:6px;right:8px;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
+#hud>*{pointer-events:auto}
+#info{text-shadow:0 0 3px #000;pointer-events:none;flex:1;padding-top:4px}
+#go input{width:110px}
+#hud button,#hud input,#hud select{font:inherit;background:#222c;color:#fff;border:1px solid #666;border-radius:4px;padding:2px 6px}
+#look{background:#111d;border:1px solid #555;border-radius:6px;padding:4px 8px;max-width:260px}
+#look summary{cursor:pointer}
+#look .f{display:grid;gap:4px;margin-top:6px}
+#look label{display:flex;justify-content:space-between;gap:6px;align-items:center}
+#look input[type=color]{width:24px;height:20px;padding:0;border:0}
+</style>
+</head><body><canvas id="c"></canvas>
+<div id="hud"><div id="info">Chargement…</div>
+<form id="go"><input name="q" placeholder="x,y ou id de carte" title="Téléportation : coordonnées (ex. 5,-18) ou identifiant de carte"></form>
+<button id="mute" title="Son"></button>
+<details id="look"><summary>Personnage</summary><div class="f"></div></details></div>
 <script type="module" src="game.js"></script></body></html>

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Regenerate every game asset in public/ from the installed Dofus 3 client (several GB, ~30-60 min). Git Bash, from the repo root.
+#   DOFUS3=<install dir> tools/build_all.sh      (default: %LOCALAPPDATA%/Ankama/Dofus-dofus3)
+set -e
+D="${DOFUS3:-$LOCALAPPDATA/Ankama/Dofus-dofus3}"; S="$D/Dofus_Data/StreamingAssets"; C="$S/Content"
+A=tools/bin/assetstudio/AssetStudioModCLI.exe; V="--unity-version 6000.3.16f1"
+[ -x "$A" ] || { echo "missing $A (see docs/extraction.md)"; exit 1; }
+mkdir -p extract
+[ -d extract/raw_data ] || $A "$C/Data" -m extract -o extract/raw_data
+node tools/extract/data.js "$S"                                           # tables + French texts
+[ -d extract/raw_maps ] || $A "$C/Map/Data" -m extract -o extract/raw_maps
+[ -d extract/mapgfx ]   || $A "$C/Map/Textures/1x" -m export -t sprite $V -g none -o extract/mapgfx
+node tools/extract/fmod.js "$C/Audio/Banks/Desktop" extract/fmod_events.json   # sound events -> waveforms
+node --max-old-space-size=8000 tools/extract/maps_build.js              # all maps + sprites (+ list of animated elements, sounds)
+node tools/extract/anim_gfx.js                                            # animated map elements -> rig list
+node --max-old-space-size=8000 tools/extract/rigs.js "$C"                # rigs (player + animated elements) and all skins
+node tools/extract/looks.js                                               # character creator data
+node tools/extract/audio.js "$C/Audio/Banks/Desktop"                      # map music / ambience -> ogg

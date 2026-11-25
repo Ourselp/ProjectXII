@@ -28,7 +28,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const t0 = Date.now();
   for (const w of waits.split(',').map(Number)) {
     await sleep(Math.max(0, w - (Date.now() - t0)));
-    const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true });
+    const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, userGesture: true, awaitPromise: true });
     console.log(`${w} ms:`, JSON.stringify(r.result?.result?.value ?? r.result?.exceptionDetails?.text));
     const shot = await send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(`${out}_${w}.png`, Buffer.from(shot.result.data, 'base64'));
