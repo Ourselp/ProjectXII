@@ -129,7 +129,8 @@ async function enterMap(id, cell) {
       const w = T.w * Math.abs(scx) / 2, h = T.h * Math.abs(scy) / 2;
       A.x0 = Math.min(A.x0, x - w); A.x1 = Math.max(A.x1, x + w); A.y0 = Math.min(A.y0, y - h); A.y1 = Math.max(A.y1, y + h);
     }
-    m.art = A; hovered = null; hero.action = null; camY = null;
+    A.gx0 = -1e5; A.gx1 = 1e5; // where the art really ends: measured on screen once drawn (measureGround)
+    m.art = A; m.frames = 0; hovered = null; hero.action = null; camY = null;
     map = m;
     monsters = []; spawnMonsters(m);
     if (cell == null || !(m.cells[cell] & 1)) cell = nearestWalkable(cell ?? 300);
@@ -184,7 +185,7 @@ const CURSOR = [arrow(0), arrow(180), arrow(270), arrow(90)];
 // ---------- interactive elements (zaap, doors, resources…): hover highlight, click = walk next to it then act
 // Which element is what is server data: zaaps are recognised by their sprite (data/zaaps.json, tools/extract/zaaps.js);
 // any other element leads to the maps sharing these coordinates (interiors / exits), if there are some.
-let hovered = null, camY = null, zaaps = { gfx: [], list: [] };
+let hovered = null, camY = null, lastDoor = null, zaaps = { gfx: [], list: [] };
 function rigBox(r) { // bounds of the rig's default animation, first frame (rig units, y up)
   if (r.box) return r.box;
   const b = [1e9, 1e9, -1e9, -1e9];
@@ -205,12 +206,20 @@ function interAt(wx, wy) {
 }
 async function interact(it) {
   if (zaaps.gfx.includes(it[0])) return openZaap();
-  const [x, y] = mapIndex[map.id], others = Object.entries(mapIndex).filter(([id, p]) => +id !== map.id && p[0] === x && p[1] === y).map(([id]) => +id);
-  if (!others.length) return chat('Rien à faire ici pour l\'instant.', 'warn');
+  if (it[7]) return chat('Ressource : la récolte arrive bientôt.', 'info'); // animated interactives are harvestables (wheat, trees, ore…)
+  // doors: where a door leads is server data. Outside, a building's interior is a map with the same coordinates and subarea
+  // but no world map (worldMap -1); inside, the way out is the outdoor map at these coordinates (back to the door used).
+  const [x, y, sub, world] = mapIndex[map.id], at = Object.entries(mapIndex).filter(([id, p]) => +id !== map.id && p[0] === x && p[1] === y);
+  let others = world !== -1 ? at.filter(([, p]) => p[2] === sub && p[3] === -1) : at.filter(([, p]) => p[3] !== -1);
+  if (world === -1 && others.length > 1) others = others.filter(([, p]) => p[2] === sub).length ? others.filter(([, p]) => p[2] === sub) : others;
+  others = others.map(([id]) => +id);
+  if (!others.length) return chat(world === -1 ? 'Pas de sortie par ici.' : 'Rien à faire ici pour l\'instant.', 'warn');
+  const go = id => { if (world !== -1) lastDoor = { map: map.id, cell: it[5] }; enterMap(id, lastDoor && lastDoor.map === id ? lastDoor.cell : null); };
+  if (others.length === 1) return go(others[0]);
   const names = await Promise.all(others.map(id => fetch(`maps/${id}.json${BUST}`, { cache: 'no-store' }).then(r => r.json()).then(m => m.name).catch(() => '')));
   const body = makeWindow('enter', 'Entrer');
   body.innerHTML = `<div class="form">${others.map((id, i) => `<button data-id="${id}">${names[i] || 'Carte'} · ${id}</button>`).join('')}</div>`;
-  body.onclick = e => { const b = e.target.closest('[data-id]'); if (b) { toggle('enter', false); enterMap(+b.dataset.id); } };
+  body.onclick = e => { const b = e.target.closest('[data-id]'); if (b) { toggle('enter', false); go(+b.dataset.id); } };
   toggle('enter', true);
 }
 function openZaap() {
@@ -237,7 +246,7 @@ cv.addEventListener('mousemove', e => {
   hoveredMon = side < 0 ? monsterAt(wx, wy) : null;
   hovered = side < 0 && !hoveredMon ? interAt(wx, wy) : null;
   monTip.hidden = !hoveredMon;
-  if (hoveredMon) { monTip.innerHTML = `<b>${hoveredMon.name}</b> · niveau ${hoveredMon.lvl}`; monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
+  if (hoveredMon) { const g = hoveredMon; monTip.innerHTML = `<b>Groupe · niveau ${g.members.reduce((t, x) => t + x.lvl, 0)}</b>` + g.members.map(x => `<div>${x.name} <span style="opacity:.7">niv. ${x.lvl}</span></div>`).join(''); monTip.style.left = e.clientX + 14 + 'px'; monTip.style.top = e.clientY - 10 + 'px'; }
   cv.style.cursor = hovered || hoveredMon ? 'pointer' : side < 0 ? (cellAt(wx, wy) >= 0 ? 'pointer' : 'default') : sideExits(side).length ? CURSOR[side] : 'not-allowed';
 });
 cv.addEventListener('click', e => {
@@ -246,7 +255,7 @@ cv.addEventListener('click', e => {
   const [wx, wy] = toWorld(e), c = cellAt(wx, wy);
   hero.exitSide = -1; hero.action = null;
   const mo = sideAt(wx, wy) < 0 && monsterAt(wx, wy);
-  if (mo) return chat(`${mo.name} (niveau ${mo.lvl}) : les combats arrivent bientôt.`, 'info');
+  if (mo) return chat(`Groupe de ${mo.members.length} monstre${mo.members.length > 1 ? 's' : ''} (niveau ${mo.members.reduce((t, x) => t + x.lvl, 0)}) : les combats arrivent bientôt.`, 'info');
   const it = sideAt(wx, wy) < 0 && interAt(wx, wy);
   if (it) return goTo(it, () => interact(it));
   if (c >= 0) { hero.path = findPath(hero.cell, c); hero.run = hero.path.length > 3; return; }
@@ -359,23 +368,38 @@ function animFor(rig, base, dir) {
   const any = Object.keys(rig.anims).find(a => a.startsWith(base + '_')) || Object.keys(rig.anims)[0];
   return [any, false];
 }
+// a group = several monsters of the subarea on one cell; only its leader (highest level) is drawn, like in the game,
+// and hovering it lists every member. Group rules are server data; we follow the usual pattern: on a normal map a small
+// (1-3), a medium (3-5) and a large (5-8) group, sometimes a 4th or one fewer; a dungeon room holds one group of 4-8.
+// Bounties ("Avis de recherche") are timed: each hour one map of their subarea holds the wanted monster, alone.
+// Seeded by the map id (and the hour for bounties): same groups on every visit.
+const rng = s => { let seed = (Math.abs(s) % 2147483646) + 1; return () => (seed = seed * 16807 % 2147483647) / 2147483647; };
 async function spawnMonsters(m) {
   monsters = []; hoveredMon = null;
-  MON ??= await fetch('data/monsters.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ sub: {}, mon: {} }));
-  const ids = MON.sub[mapIndex[m.id]?.[2]] || []; if (!ids.length) return;
-  let seed = (m.id % 2147483646) + 1; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
+  MON ??= await fetch('data/monsters.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ sub: {}, mon: {}, bounty: {}, dungeon: [] }));
+  const sub = mapIndex[m.id]?.[2], indoor = mapIndex[m.id]?.[3] === -1 && !MON.dungeon.includes(sub); // no monsters inside houses
+  const ids = indoor ? [] : MON.sub[sub] || [], rnd = rng(m.id), list = [];
   const free = m.cells.map((v, i) => i).filter(i => (m.cells[i] & 3) === 1 && i !== hero.cell);
-  const list = [];
-  for (let g = 0, n = 1 + Math.floor(rnd() * 3); g < n && free.length; g++) {
-    const c0 = free[Math.floor(rnd() * free.length)], [cx, cy] = cellXY(c0);
-    const near = free.filter(c => !list.some(x => x.cell === c)).sort((a, b) => { const [ax, ay] = cellXY(a), [bx, by] = cellXY(b); return Math.hypot(ax - cx, ay - cy) - Math.hypot(bx - cx, by - cy); });
-    for (let k = 0, size = 1 + Math.floor(rnd() * 4); k < size && near[k * 2]; k++) {
-      const id = ids[Math.floor(rnd() * ids.length)], [name, , , , , lo, hi] = MON.mon[id], cell = near[k * 2], [x, y] = cellXY(cell);
-      list.push({ id, name, lvl: lo + Math.floor(rnd() * (hi - lo + 1)), cell, x, y, dir: [1, 3, 5, 7][Math.floor(rnd() * 4)], path: [], t: rnd() * 5, wait: 2 + rnd() * 8, rnd });
-    }
+  const member = id => { const [name, , , , , lo, hi] = MON.mon[id]; return { id, name, lvl: lo + Math.floor(rnd() * (hi - lo + 1)) }; };
+  const place = members => {
+    const spots = free.filter(c => list.every(o => Math.hypot(cellXY(c)[0] - o.x, cellXY(c)[1] - o.y) > W * 3)); if (!spots.length) return;
+    const cell = spots[Math.floor(rnd() * spots.length)], [x, y] = cellXY(cell);
+    members.sort((p, q) => q.lvl - p.lvl);
+    list.push({ members, id: members[0].id, cell, x, y, dir: [1, 3, 5, 7][Math.floor(rnd() * 4)], path: [], t: rnd() * 5, wait: 2 + rnd() * 8, rnd });
+  };
+  const between = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+  if (ids.length) {
+    const sizes = MON.dungeon.includes(sub) ? [between(4, 8)] : [between(1, 3), between(3, 5), between(5, 8)];
+    if (sizes.length > 1) { const r = rnd(); if (r < .25) sizes.pop(); else if (r > .8) sizes.push(between(1, 8)); }
+    for (const n of sizes) place(Array.from({ length: n }, () => member(ids[Math.floor(rnd() * ids.length)])));
   }
-  await Promise.all(list.map(async mo => { mo.look = await monLook(mo.id); }));
-  if (map === m) monsters = list.filter(mo => mo.look);
+  const wanted = MON.bounty[sub];
+  if (wanted && !indoor) { // this hour's bounty map in the subarea
+    const maps = Object.keys(mapIndex).filter(id => mapIndex[id][2] === sub).sort(), hour = Math.floor(Date.now() / 3.6e6), h = rng(hour * 7919 + sub);
+    if (+maps[Math.floor(h() * maps.length)] === m.id) place([member(wanted[Math.floor(h() * wanted.length)])]);
+  }
+  await Promise.all(list.map(async g => { g.look = await monLook(g.id); }));
+  if (map === m) monsters = list.filter(g => g.look);
 }
 function updateMonsters(dt) {
   for (const mo of monsters) {
@@ -405,17 +429,22 @@ function monsterAt(wx, wy) {
 const monTip = Object.assign(document.createElement('div'), { className: 'panel', hidden: true });
 monTip.style.cssText = 'position:fixed;padding:4px 8px;pointer-events:none;z-index:40;font-size:12px'; document.body.append(monTip);
 
+// black fades over the map art's ragged left / right edges when they are on screen (CSS overlays, CSS pixels)
+const fades = [0, 1].map(() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;top:0;pointer-events:none'; cv.after(d); return d; }); // right after the canvas: under the HUD
+function edgeFade() {
+  const A = { x0: map.art.gx0, x1: map.art.gx1 }, r = cv.getBoundingClientRect(), k = 1 / devicePixelRatio, F = 90; // fade width (map px)
+  const l0 = sx(A.x0) * k, l1 = sx(A.x0 + F) * k, r0 = sx(A.x1) * k, r1 = sx(A.x1 - F) * k; // black up to the measured edge, then fade
+  const set = (d, x, w, css) => Object.assign(d.style, { left: r.left + x + 'px', top: r.top + 'px', width: Math.max(0, w) + 'px', height: r.height + 'px', background: css, display: w > 0 ? '' : 'none' });
+  set(fades[0], 0, l0 > 0 ? l1 : 0, `linear-gradient(to right, #000 ${l0 / l1 * 100}%, transparent)`);
+  set(fades[1], r1, r0 < r.width ? r.width - r1 : 0, `linear-gradient(to left, #000 ${(r.width - r0) / (r.width - r1) * 100}%, transparent)`);
+}
 function render() {
-  // camera: show the grid's full height, zoom further only if the screen is wider than the map art (whose edges are
-  // jagged / black), then follow the hero vertically. Art bounds are trimmed 4 %: trees overhang the ground edge.
-  const A = map.art, tw = (A.x1 - A.x0) * .04;
-  const M = { x0: Math.max(A.x0 + tw, GRID.l - 4 * W), x1: Math.min(A.x1 - tw, GRID.r + 4 * W), y0: GRID.b - H, y1: GRID.t + H };
-  M.x0 = Math.min(M.x0, GRID.l); M.x1 = Math.max(M.x1, GRID.r);
-  cam.z = Math.max(cv.width / (M.x1 - M.x0), cv.height / (M.y1 - M.y0));
-  const vw = cv.width / cam.z, vh = cv.height / cam.z, clamp = (v, a, b) => a > b ? (a + b) / 2 : Math.min(Math.max(v, a), b);
-  cam.x = clamp(X0 + 6.75 * W, M.x0 + vw / 2, M.x1 - vw / 2);
-  const ty = clamp(hero.y, M.y0 + vh / 2, M.y1 - vh / 2);
-  camY = camY == null ? ty : camY + (ty - camY) * .08; cam.y = camY;
+  // camera: fixed, the whole map (cell grid + half a cell) fills the screen; no scrolling. If the screen is wider than the
+  // map art, its ragged left / right edges are faded to black (edgeFade).
+  const gw = GRID.r - GRID.l + W, gh = GRID.t - GRID.b + H;
+  cam.z = Math.min(cv.width / gw, cv.height / gh);
+  cam.x = (GRID.l + GRID.r) / 2; cam.y = (GRID.t + GRID.b) / 2;
+  edgeFade();
   const bg = map.bg >>> 0; gl.clearColor((bg >> 16 & 255) / 255, (bg >> 8 & 255) / 255, (bg & 255) / 255, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   beginSprites(); map.back.forEach(group);
   // actors (hero + monsters) are drawn before the first middleground group of a later cell
@@ -430,6 +459,24 @@ function render() {
   map.fore.forEach(group);
   if (hovered) highlight(hovered);
   if (showGrid) drawGrid();
+  if (++map.frames === 4) measureGround(); // once the map's textures are on screen
+}
+// where the map art really ends on each side: read 8 rendered rows and, from the centre outwards, find the first pixel
+// of background colour; the furthest-in one per side is where the ragged edge starts (map px, used by edgeFade)
+function measureGround() {
+  const w = cv.width, px = new Uint8Array(w * 4), bg = map.bg >>> 0, bgc = [bg >> 16 & 255, bg >> 8 & 255, bg & 255];
+  const isBg = i => Math.abs(px[i] - bgc[0]) + Math.abs(px[i + 1] - bgc[1]) + Math.abs(px[i + 2] - bgc[2]) < 12;
+  let L = 0, R = w - 1;
+  for (let k = 1; k <= 8; k++) {
+    gl.readPixels(0, Math.floor(cv.height * k / 9), w, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    if (isBg((w >> 1) * 4)) continue; // row outside the art (small interiors): says nothing about the side edges
+    const run = (x, d) => { for (let j = 0; j < 24; j++) { const p = x + j * d; if (p < 0 || p >= w || !isBg(p * 4)) return false; } return true; }; // 24 px of background, not a dark outline
+    for (let x = w >> 1; x > 0; x--) if (run(x, -1)) { L = Math.max(L, x); break; }
+    for (let x = w >> 1; x < w; x++) if (run(x, 1)) { R = Math.min(R, x); break; }
+  }
+  const toX = p => (p - cv.width / 2) / cam.z + cam.x;
+  // never fade over the walkable grid
+  map.art.gx0 = L > 0 ? Math.min(toX(L), GRID.l - W) : -1e5; map.art.gx1 = R < w - 1 ? Math.max(toX(R), GRID.r + W) : 1e5;
 }
 // option: cell grid (walkable = teal, exits = green), drawn with the sprite program as thin quads would be overkill: 2D overlay canvas
 const ov = document.createElement('canvas'); ov.style.cssText = 'position:fixed;left:0;top:0;pointer-events:none'; document.body.append(ov);
@@ -454,4 +501,4 @@ setupWorldMap(() => map.id, mapIndex, id => { toggle('map', false); startAudio()
 zaaps = await fetch('data/zaaps.json' + BUST, { cache: 'no-store' }).then(r => r.json()).catch(() => zaaps);
 await enterMap(q.get('map') || 191105026, q.get('cell') != null ? +q.get('cell') : 300);
 requestAnimationFrame(frame);
-window.game = { hero, get map() { return map; }, findPath, enterMap, cellXY, audio, startAudio, sx, sy };
+window.game = { hero, get map() { return map; }, get monsters() { return monsters; }, findPath, enterMap, cellXY, audio, startAudio, sx, sy };
