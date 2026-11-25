@@ -40,6 +40,7 @@ Tools to download into `tools/bin/` (git-ignored):
 | `anim_gfx.js`, `rigs.js` | animated map elements + player rigs → `public/rigs/`, all skins → `public/skins/` |
 | `worldmap.js` | world map window → `public/data/world.json`: per world (`MapsInformation.worldMap`), one map per position (first listed in `MapsCoordinatesDataRoot`) |
 | `looks.js` | character creator data → `public/data/looks.json` |
+| `ui_skin.js` | client UI skin (`aa/StandaloneWindows64/ui*`, `icons_*`, `ornaments_*`… exported to `extract/ui_raw/`, ~9 000 images): filterable gallery `extract/ui_raw/index.html`, HUD pieces (heart gauge, AP/MP counters, spell slots/buttons, timeline, banner, entity gauges, HUD buttons) → `public/ui/hud/` |
 | `ui.js` | HUD: class spells (name, icon `Picto/Spells` `sort_<iconId>`, AP, range, description) → `public/data/spells.json`, portraits `Head_<bodySkin>` → `public/ui/` |
 
 ## Formats worked out

@@ -18,4 +18,6 @@ node tools/extract/worldmap.js                                            # worl
 node tools/extract/looks.js                                               # character creator data
 [ -d extract/picto ] || { mkdir -p extract/picto_in; cp "$C/Picto/Spells/spell_assets_1x.bundle" "$C/Picto/UI/class_assets_.bundle" extract/picto_in/; $A extract/picto_in -m export -t sprite $V -g type -o extract/picto; }
 node tools/extract/ui.js                                                  # HUD: class spells, icons, portraits
+[ -d extract/ui_raw ] || { mkdir -p extract/ui_in; cp "$S"/aa/StandaloneWindows64/{ui,icons_,ornaments_,spriteassets_,tss_,figs_}*.bundle extract/ui_in/; $A extract/ui_in -m export -t sprite,tex2d $V -g type -o extract/ui_raw; }
+node tools/extract/ui_skin.js                                             # client UI skin: gallery + HUD pieces -> public/ui/hud
 node tools/extract/audio.js "$C/Audio/Banks/Desktop"                      # map music / ambience -> ogg
