@@ -15,12 +15,14 @@ per-page-load `?v=` (index.html imports `game.js?v=<now>`, the other modules reu
 
 - Click a cell to move (run if the path is longer than 3 cells). Click beyond a map edge to leave that way: green arrow where the
   map has an exit on that side, forbidden sign where it doesn't.
-- HUD (classic layout, skinned with the client's own UI sprites: heart life gauge, AP star, MP diamond, spell slots, menu icons, window frames): place name top left; bottom banner = chat | "Chabou" portrait, life / AP / MP | class spell bar
-  (hover for details, keys 1–0) | menu.
-- Menu (banner, client menu icons): the client's own windows, converted from its UI Toolkit layouts (draggable by the title, Esc closes):
-  Caractéristiques (C, our hero's name / class / AP / MP), Sorts (S, the class spells in the grimoire), Inventaire (I, hero on the pedestal),
+- HUD = the client's own widgets, each a separate module dragged by its header (shown on hover), positions remembered (`/hud` resets):
+  life heart + AP / MP, action bar (class spells, hover for details, keys 1–0), menu column (right), chat, XP gauge (top). Place name top left.
+- Test character: random stats on every line (level, characteristics, secondary stats, damages, resistances, kamas), `/stats` rolls new ones.
+- Menu: the client's own windows, converted from its UI Toolkit layouts (draggable by the title, Esc closes):
+  Caractéristiques (C: simple and detailed views), Sorts (S, the class spells in the grimoire), Inventaire (I, hero on the pedestal),
+  Cosmétiques (hats, capes, shields, wings: a thumbnail of the hero wearing each, click to wear / take off),
   Quêtes (Q), Succès (U), Métiers (J), Encyclopédie (B), Amis (F), Guilde (G), Alliance, Alignement, Montures (D), Compagnons, Almanax,
-  Recherche de groupe, Cosmétiques, Préréglages, Guide, Boutique. Most are empty shells: in the client the server fills them.
+  Recherche de groupe, Préréglages, Guide, Boutique. Most are empty shells: in the client the server fills them.
   Our own windows: Carte du monde (M: click a position to go there), Apparence (A: class, head, colours, equipment),
   Options (O: music / ambience volume, cell grid), Aide (H).
 - `uitk.html`: every one of the client's 699 layouts (windows, tooltips, popups, list rows), filterable.

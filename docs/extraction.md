@@ -63,6 +63,12 @@ parent links are back-references, kept as `{$rid}`):
   `--uta-v` (inherited) for the vertical part; sprite borders / `-unity-slice-*` → `border-image`; `-unity-background-image-tint-color`
   → a `::before` with the tint colour masked by the image (`--u-tint`, `--u-img`: Dofus has its own `--tint`); urls all relative to
   `public/` (a url inside `var()` resolves against the sheet that uses it). Scaling: `PanelSettings` reference 1920×1080, shrink, ×0.9.
+- Sheets: `MergedUSS` (tss bundle) + Unity's `default` + the `Standard` theme are global; the ~370 sheets that layouts attach to
+  their elements (`m_Stylesheets`, where most layout rules are: `#tx_hp{width:106px}`…) apply only to that element's subtree in
+  Unity, and ids like `#ctr_content` repeat across layouts, so each is scoped: class `ss<n>` on the element, rules become
+  `:where(.ss<n>) sel, sel:where(.ss<n>)` (same specificity). `:root` → `:where(.uitk-root)` (the theme never touches the page).
+- HUD widgets = `MagneticDragWindow` layouts (`characterInformations`, `actionBar`, `bannerMenu`, `chatview`, `widgetProgressGauge`…);
+  the client fills their grids (`SlotGrid`) and sizes some parts (heart erosion mask) in code.
 
 ## Formats worked out
 

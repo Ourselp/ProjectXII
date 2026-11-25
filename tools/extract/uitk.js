@@ -126,16 +126,20 @@ function declarations(sheet, cab, props) { // USS properties -> 'a:b;c:d'
 }
 // tinted image = tint colour masked by the (white) sprite, like Unity's multiply; a ::before behind the children
 const TINT = "--u-img:inherit;--u-tint:inherit;content:'';position:absolute;inset:0;pointer-events:none;background:var(--u-tint);-webkit-mask:var(--u-img) center/100% 100% no-repeat;mask:var(--u-img) center/100% 100% no-repeat;border-radius:inherit";
-const PSEUDO = { hover: ':hover', active: ':active', focus: ':focus', root: ':where(:root,.uitk-root)', disabled: '.is-disabled', enabled: ':not(.is-disabled)', checked: '.is-checked', selected: '.is-selected', inactive: ':not(:active)' };
+const PSEUDO = { hover: ':hover', active: ':active', focus: ':focus', root: ':where(.uitk-root)', disabled: '.is-disabled', enabled: ':not(.is-disabled)', checked: '.is-checked', selected: '.is-selected', inactive: ':not(:active)' };
 function selector(cs) {
   return cs.m_Selectors.map((s, i) => (i ? (s.m_PreviousRelationship === 1 ? ' > ' : ' ') : '') + s.m_Parts.map(p =>
     p.m_Type === 1 ? '*' : p.m_Type === 2 ? `[data-t="${p.m_Value}"]` : p.m_Type === 3 ? '.' + esc(p.m_Value) : p.m_Type === 6 ? '#' + esc(p.m_Value)
       : p.m_Type === 4 || p.m_Type === 5 ? (PSEUDO[p.m_Value] ?? '.is-' + esc(p.m_Value)) : '').join('')).join('');
 }
-function css(o) {
+// a sheet attached to an element (m_Stylesheets) applies to it and its subtree only: its rules are scoped by a class on that
+// element, inside :where() so the client's specificities stay as they are
+const scoped = (sel, sc) => [`:where(.${sc}) ${sel}`, `${sel}:where(.${sc})`];
+function css(o, sc) {
   const s = o.value; let out = `/* ${o.name} */\n`;
   for (const r of s.m_Rules) {
-    const sel = r.m_ComplexSelectors.map(selector).filter(Boolean); if (!sel.length) continue;
+    let sel = r.m_ComplexSelectors.map(selector).filter(Boolean); if (!sel.length) continue;
+    if (sc) sel = sel.flatMap(x => scoped(x, sc));
     const d = declarations(s, o.cab, r.m_Properties); if (d) out += `${sel.join(',')}{${d}}\n`;
     if (d.includes('--u-tint:')) out += `${sel.map(x => x + '::before').join(',')}{${TINT}}${sel.join(',')}{background-image:none!important}\n`;
   }
@@ -159,6 +163,14 @@ let out = fonts.map(f => `@font-face{font-family:"${f.replace('.ttf', '')}";src:
 .uitk-root .tinted::before{${TINT}}.uitk-root .tinted{background-image:none!important}
 `;
 for (const n of ['default', 'Standard', 'MediumFont_Standard', 'MergedUSS']) out += pick(n) ? css(pick(n)) : `/* missing ${n} */\n`;
+// + the sheets the layouts attach to their elements (m_Stylesheets): most layout rules live there, each scoped (class ss<n>)
+const used = new Map(), GLOBAL = ['default', 'Standard', 'MediumFont_Standard', 'MergedUSS'];
+for (const o of Object.values(layouts)) (function walk(n) {
+  for (const p of n.m_Stylesheets || []) { const s = deref(o.cab, p); if (s?.value?.m_Rules && !GLOBAL.includes(s.name) && !used.has(s.cab + s.pathId)) used.set(s.cab + s.pathId, { ...s, sc: 'ss' + used.size }); }
+  for (const c of n.m_Children || []) walk(c);
+})(o.value.m_VisualTree);
+for (const s of used.values()) out += css(s, s.sc);
+const scopes = (vta, n) => (n.m_Stylesheets || []).map(p => { const s = deref(vta.cab, p); return s && used.get(s.cab + s.pathId)?.sc; }).filter(Boolean);
 fs.writeFileSync('public/uitk-client.css', out);
 
 // ---------- layouts -> HTML. Dofus' own controls (Core.UILogic.Components.*) build their parts in C#: rebuilt here from their
@@ -176,18 +188,20 @@ const BUILTIN = { Label: 'unity-text-element unity-label', DofusLabel: 'unity-te
 function control(t, a, inner) { // -> [extra classes, inner html]
   const bar = (lo, hi, v) => `<div class="pb-fill" style="width:${Math.max(0, Math.min(100, (v - lo) / ((hi - lo) || 1) * 100))}%"></div>`;
   switch (t) {
+    case 'MagneticDragWindow': // HUD widget: header (icon, title) shown on hover, dragged by it
+      return ['mdw', (a['has-header'] === 'false' ? '' : `<div class="mdw-head">${icon(a['header-icon']) ? `<div class="dbtn-icon" style="--i:url(${icon(a['header-icon'])})"></div>` : ''}<div class="mdw-title">${text(a['header-title'] || '')}</div></div>`) + inner];
     case 'WindowFigma': return [`wf wf--${(a['header-style'] || 'primary').toLowerCase()}`, (a['with-title-bar'] === 'false' || a['hide-title-bar'] === 'true' ? '' :
       `<div class="wf-head">${icon(a['img-url']) ? `<img class="wf-icon" src="${icon(a['img-url'])}">` : ''}<div class="wf-title">${text(a.title || '')}</div>` +
       `${a['show-help-button'] === 'true' ? `<div class="wf-btn" style="--i:url(${icon(a['help-icon'] || 'questionMark')})"></div>` : ''}${a['show-close-button'] === 'false' ? '' : '<div class="wf-btn wf-close"></div>'}</div>`) + `<div class="wf-body">${inner}</div>`];
     case 'DofusButtonCustom': case 'DofusButton': case 'DofusToggleButtonCustom': {
-      const ic = icon(a['image-url'] || a['icon-url'] || a['icon-value'] || a.icon);
-      return [`dbtn dbtn--${(a['main-style'] || 'primary').toLowerCase()} dbtn--${a.size || a['toggle-size'] || 'medium'}${a.text ? '' : ' dbtn--icon'}`,
+      const ic = a['icon-type'] === 'Image' || !(a['icon-value'] || a.icon) ? icon(a['image-url'] || a['icon-url']) || icon(a['icon-value'] || a.icon) : icon(a['icon-value'] || a.icon) || icon(a['image-url'] || a['icon-url']); // icon-type=Image: the picture, else the named icon
+      return [`dbtn dbtn--${(a['main-style'] || (t === 'DofusToggleButtonCustom' ? 'secondary' : 'primary')).toLowerCase()} dbtn--${a.size || a['toggle-size'] || 'medium'}${a.text ? '' : ' dbtn--icon'}`,
         (ic ? `<div class="dbtn-icon" style="--i:url(${ic})"></div>` : '') + (a.text ? `<div class="dbtn-label">${text(a.text)}</div>` : '') + inner];
     }
     case 'DofusIcon': return ['dicon', inner, icon(a.icon)];
     case 'Divider': return [`divider${a.orientation === 'vertical' ? ' divider--v' : ''}`, `<i></i>${icon(a.diamond) ? `<img src="${icon(a.diamond)}">` : ''}<i></i>`];
     case 'ExtendedProgressBarInt': case 'ExtendedProgressBarFloat': case 'ExtendedProgressBarLong':
-      return [`pb pb--${a['gauge-color'] || 'primary'} pb--${a['gauge-size'] || 'large'}`, bar(+a['low-value'] || 0, +a['high-value'] || 100, +a.value || 0)];
+      return [`pb pb--${a['gauge-color'] || 'primary'} pb--${a['gauge-size'] || 'large'}`, bar(+a['low-value'] || 0, +a['high-value'] || (+a.value <= 1 ? 1 : 100), +a.value || 0)]; // no high value: a 0..1 ratio (weight bar);
     case 'Slot': return [`slot slot--${a['slot-size'] || 'medium'}`, (icon(a['icon-value']) ? `<div class="slot-icon" style="--i:url(${icon(a['icon-value'])})"></div>` : '') + inner];
     case 'SlotGrid': return ['slotgrid', inner || `<div class="slot slot--${a['slot-size'] || 'small'}"></div>`.repeat(Math.min(60, (+a['fixed-row-count'] || 2) * (+a['fixed-column-count'] || 6)))];
     case 'CheckboxCustom': case 'Toggle': case 'Switch': case 'RadioButton': return ['dcheck', `<div class="dcheck-box"></div>${a.text || a.label ? `<div class="unity-text-element">${text(a.text || a.label)}</div>` : ''}${inner}`];
@@ -210,7 +224,11 @@ function element(vta, n, depth, usings) {
   const own = t === 'UXML' || t === 'VisualElement' ? null : layouts[t] ? t : Object.keys(layouts).filter(k => k.length > 8 && t.startsWith(k)).sort((x, y) => y.length - x.length)[0];
   const tpl = n.m_TemplateAlias ? usings[n.m_TemplateAlias] : own && own !== vta.name ? layouts[own] : null;
   if (tpl && depth < 8) inner = layout(tpl, depth + 1, true) + inner;
-  if (t === 'UXML') return inner;
+  if (t === 'UXML') { // sheets on the document root: on the layout's wrapper, or a display:contents box when nested in another layout
+    const sc = scopes(vta, n); if (!sc.length) return inner;
+    if (!vta.nested) { vta.rootClasses = sc; return inner; }
+    return `<div class="${sc.join(' ')}" style="display:contents">${inner}</div>`;
+  }
   const st = n.m_RuleIndex >= 0 && vta.inline ? declarations(vta.inline.value, vta.inline.cab, vta.inline.value.m_Rules[n.m_RuleIndex].m_Properties) : '';
   let [cls, body, bg] = control(t, a, inner), extra = '';
   if (a['gap-value']) extra += `gap:${a['gap-value']}px;`;
@@ -220,15 +238,15 @@ function element(vta, n, depth, usings) {
   }
   const st2 = extra + st;
   if (a.text != null && BUILTIN[t]?.includes('text')) body = text(a.text) + body;
-  const classes = [BUILTIN[t], cls, st.includes('--u-tint:') && 'tinted', ...(n.m_Classes || [])].filter(Boolean).join(' ');
+  const classes = [BUILTIN[t], cls, ...scopes(vta, n), st.includes('--u-tint:') && 'tinted', ...(n.m_Classes || [])].filter(Boolean).join(' ');
   return `<div data-t="${t}"${a.name ? ` id="${html(a.name)}"` : ''}${classes ? ` class="${html(classes)}"` : ''}${st2 || bg ? ` style="${html((bg ? `--i:url(${bg});--u-img:url(${bg});` : '') + st2)}"` : ''}${a.tooltip ? ` title="${text(a.tooltip)}"` : ''}>${body}</div>`;
 }
 function layout(o, depth = 0, nested = false) {
-  const v = o.value, vta = { name: o.name, inline: deref(o.cab, v.inlineSheet) }, usings = {};
+  const v = o.value, vta = { name: o.name, cab: o.cab, nested, inline: deref(o.cab, v.inlineSheet) }, usings = {};
   for (const u of v.m_Usings || []) { const t = deref(o.cab, u.asset); if (t) usings[u.alias] = layouts[t.name] || { cab: t.cab, ...t }; }
   built++;
   const body = element(vta, v.m_VisualTree, depth, usings);
-  return nested ? body : `<div class="uitk-root" data-layout="${o.name}">${body}</div>`;
+  return nested ? body : `<div class="${['uitk-root', ...(vta.rootClasses || [])].join(' ')}" data-layout="${o.name}">${body}</div>`;
 }
 for (const n in layouts) fs.writeFileSync(`${OUT}/layouts/${n}.html`, layout(layouts[n]));
 fs.writeFileSync(`${OUT}/layouts/index.json`, JSON.stringify(Object.keys(layouts).sort()));

@@ -8,6 +8,8 @@ export const SLOTS = { hat: 'Chapeau', cape: 'Cape', shield: 'Bouclier', wings: 
 const hex = n => '#' + (n >>> 0).toString(16).padStart(6, '0').slice(-6);
 export const lookState = () => state;
 export const breedOf = () => D.breeds.find(x => x.id === state.breed) || D.breeds[0];
+export const cosmetics = slot => D.equip[slot] || []; // skin ids wearable in a slot
+export function equip(slot, id) { state[slot] = String(state[slot]) === String(id) ? '' : String(id); changed(); } // same id again = take it off
 
 export async function setupLook() {
   D = await fetch('data/looks.json' + BUST, { cache: 'no-store' }).then(r => r.json());
@@ -40,8 +42,8 @@ function render() {
 }
 
 // load everything the current look needs into a WebGL context
-export async function buildLook(gl) {
-  const b = breedOf(), L = b.looks[state.gender], head = (D.heads[`${b.id}_${state.gender}`] || [])[state.head];
+export async function buildLook(gl, over = {}) { // over: look fields to override (cosmetic thumbnails)
+  const state = { ...lookState(), ...over }, b = D.breeds.find(x => x.id === state.breed) || D.breeds[0], L = b.looks[state.gender], head = (D.heads[`${b.id}_${state.gender}`] || [])[state.head];
   const ids = [head?.skin, ...Object.keys(SLOTS).map(s => state[s]), L.skin].filter(Boolean);
   const [move, idle, ...skins] = await Promise.all([loadRig(gl, '1-movement'), loadRig(gl, '1-static'), ...ids.map(id => loadSkin(gl, id))]);
   return { ready: !!(move && idle), move, idle, skins: skins.filter(Boolean), cols: colorsOf(state.colors || L.colors), scale: L.scale / 100, hideHair: !!state.hat };

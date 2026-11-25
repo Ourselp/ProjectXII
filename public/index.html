@@ -6,7 +6,7 @@
 /* client skin (public/ui/hud, from tools/extract/ui_skin.js): dark slate panels, lime green accents */
 :root{--bg:#262a2bf2;--bg2:#1a1d1e;--line:#4b5150;--teal:#b4d334;--gold:#e8c35a;--text:#ece9df;--muted:#a8a99f}
 *{scrollbar-color:#5d6360 #1a1d1e}html,body{margin:0;height:100%;overflow:hidden;background:#000;font:13px system-ui,sans-serif;color:var(--text)}
-canvas#c{display:block;width:100vw;height:calc(100vh - 118px)}
+canvas#c{display:block;width:100vw;height:100vh}
 button,input,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:3px 7px}
 button{cursor:pointer}button:hover{border-color:var(--teal)}
 .panel{background:var(--bg);border:1px solid var(--line);border-radius:4px;box-shadow:0 6px 18px #000a}
@@ -14,38 +14,12 @@ button{cursor:pointer}button:hover{border-color:var(--teal)}
 #place{position:fixed;left:10px;top:10px;padding:6px 12px;pointer-events:none}
 #place b{color:var(--gold);font-size:14px}#place small{display:block;color:var(--muted)}
 #heroname{position:fixed;left:0;top:0;pointer-events:none;font-weight:600;color:#fff;text-shadow:0 0 3px #000,0 0 6px #000;white-space:nowrap}
-/* bottom banner: chat | stats | spells | menu */
-#banner{position:fixed;left:0;right:0;bottom:0;height:118px;display:grid;grid-template-columns:minmax(260px,1.2fr) auto minmax(300px,2fr) auto;gap:10px;
-  padding:8px 10px;box-sizing:border-box;background:linear-gradient(#2e3231,#1a1c1c);border-top:1px solid #5d6360}
-#xp{position:absolute;left:0;right:0;top:-6px;height:4px;background:#0009}#xp i{display:block;width:12%;height:100%;background:linear-gradient(#d4ee5a,#86a81c)}
-#chat{display:flex;flex-direction:column;min-width:0}
-#chatlog{flex:1;overflow-y:auto;font-size:12px;line-height:1.35;padding:2px 4px;background:#0006;border-radius:6px}
+/* HUD: the client widgets (hud.js); these parts of ours live inside them: chat log, chat input, mute button */
+#chatlog{height:100%;overflow-y:auto;font:12px/1.4 "Lexend-Regular",system-ui,sans-serif;padding:4px 6px;color:#e6e4f0}
 #chatlog .info{color:#9fe3d8}#chatlog .map{color:var(--gold)}#chatlog .warn{color:#ff9f9f}
-#say{display:flex;margin-top:4px}#say input{flex:1}
-#core{display:flex;align-items:center;gap:8px}
-#core .portrait{width:62px;height:62px;border-radius:50%;object-fit:cover;background:#0006;border:2px solid var(--gold)}
-#core .who{display:flex;flex-direction:column;gap:2px;min-width:90px}.hero-name{font-weight:700;font-size:15px}.cls{color:var(--muted);font-size:12px;white-space:nowrap}
-.orb{position:relative;display:grid;place-items:center;font-weight:700;text-align:center;line-height:1.05;text-shadow:0 0 2px #000,0 1px 2px #000;background:center/100% no-repeat}
-.orb span{position:relative;z-index:1}.orb small{display:block;font-weight:400;opacity:.85;font-size:10px}
-/* life heart: background, red fill clipped to --hp (0..1), then shading and border on top */
-#life{width:84px;height:84px;font-size:15px;background-image:url(ui/hud/gaugeHeartBackground.png)}
-#life::before,#life::after{content:'';position:absolute;inset:0;background:center/100% no-repeat}
-#life::before{background-image:url(ui/hud/gaugeHeartFilledRed.png);clip-path:inset(calc(100% - var(--hp,1) * 100%) 0 0 0)}
-#life::after{background-image:url(ui/hud/gaugeHeartShadeEdge.png),url(ui/hud/gaugeHeartBorder.png)}
-#life:hover::after{background-image:url(ui/hud/gaugeHeartShadeEdge.png),url(ui/hud/gaugeHeartBorderHover.png)}
-#ap,#mp{width:46px;height:46px;font-size:14px}#ap small,#mp small{display:none}
-#ap{background-image:url(ui/hud/paCounter.png)}#mp{background-image:url(ui/hud/pmCounter.png)}
-#spellbar{display:grid;grid-template-columns:repeat(auto-fill,40px);grid-auto-rows:40px;gap:4px;align-content:center;overflow:hidden}
-#spellbar button,.spell button{position:relative;padding:3px;width:40px;height:40px;border:0;border-radius:6px;background:url(ui/hud/bg_spell_icon.png) center/100%}
-#spellbar button::after,.spell button::after{content:'';position:absolute;inset:0;background:url(ui/hud/slotSpell_silverM.png) center/100%}
-#spellbar button:hover::after,.spell button:hover::after{background-image:url(ui/hud/slotSpell_goldM.png)}
-#spellbar img,.spell img{width:100%;height:100%;display:block;border-radius:4px}
-kbd{position:absolute;z-index:1;left:2px;bottom:1px;font-size:9px;color:#fff;text-shadow:0 0 2px #000}
+#say{display:flex;flex:1}#say input{flex:1;background:#0006;border:1px solid #ffffff22;color:#fff}
+#hud-parts{display:none}
 .cast{animation:cast .5s}@keyframes cast{0%{box-shadow:0 0 0 0 var(--gold)}100%{box-shadow:0 0 0 10px #0000}}
-#menu{display:grid;grid-template-columns:repeat(8,32px);grid-auto-rows:32px;gap:4px;align-content:center}
-#menu button{padding:0;font-size:18px;display:grid;place-items:center;border:0;background:url(ui/hud/btn_transparent_normal.png) center/100%}
-#menu button:hover,#menu button.on{background-image:url(ui/hud/btn_transparent_over.png)}#menu button.on{outline:1px solid var(--teal)}
-#menu img{width:26px;height:26px;object-fit:contain}
 canvas.inv3d{position:absolute;left:50%;top:120px;width:300px;height:380px;margin-left:-150px;background:none;z-index:1}
 #tip{position:fixed;width:260px;padding:8px 10px;pointer-events:none;z-index:50}
 #tip b{color:var(--gold);display:block}#tip span{color:var(--muted);font-size:12px}#tip p{margin:6px 0 0}
@@ -61,37 +35,18 @@ canvas.inv3d{position:absolute;left:50%;top:120px;width:300px;height:380px;margi
 .cols{display:flex;gap:3px}.form input[type=color]{width:26px;height:22px;padding:0;border:0;background:none}
 .preview{width:200px;height:240px;background:radial-gradient(#3a403f,#1a1d1e);border-radius:8px;cursor:pointer}
 .row{display:flex;gap:12px;align-items:flex-start}
-#bag{display:grid;grid-template-columns:repeat(6,38px);grid-auto-rows:38px;gap:4px;margin-top:8px}
-#bag div{background:url(ui/hud/bg_spell_icon.png) center/100%;border-radius:5px}
-.stats td{padding:3px 8px}.stats td:last-child{text-align:right;color:var(--gold)}
-.spell{display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)}.spell p{margin:3px 0 0;color:var(--muted)}.spell span{color:var(--muted);font-size:12px}
-#spell-list{max-width:460px}
 /* world map */
-#win-map{left:40px;top:40px;right:40px;bottom:140px;max-height:none}
+#win-map{left:40px;top:40px;right:40px;bottom:40px;max-height:none}
 #win-map .body{flex:1;display:flex;flex-direction:column;padding:6px 8px;min-height:0}
 #wm-tools{display:flex;gap:8px;align-items:center;margin-bottom:6px}#wm-tools span{flex:1;color:var(--muted);font-size:12px}
 #wm-canvas{flex:1;width:100%;min-height:0;border-radius:6px;cursor:crosshair;touch-action:none}
 #wm-tip{position:absolute;padding:5px 8px;pointer-events:none;font-size:12px;z-index:2}#wm-tip b{color:var(--gold)}
-@media (max-width:1100px){#banner{grid-template-columns:auto minmax(200px,1fr) auto}#chat{display:none}}
 </style>
 </head><body><canvas id="c"></canvas>
 <div id="heroname" class="hero-name"></div>
 <div id="place" class="panel">Chargement…</div>
 
-<div id="banner">
-  <div id="xp"><i></i></div>
-  <div id="chat"><div id="chatlog"></div><form id="say"><input name="t" placeholder="Entrée pour parler · /tp x,y" autocomplete="off"></form></div>
-  <div id="core">
-    <img class="portrait" alt="">
-    <div class="who"><span class="hero-name"></span><span class="cls"></span></div>
-    <div class="orb" id="life" title="Points de vie"><span>55<small>/ 55</small></span></div>
-    <div style="display:grid;gap:4px"><div class="orb" id="ap" title="Points d'action"><span>6<small>PA</small></span></div><div class="orb" id="mp" title="Points de mouvement"><span>3<small>PM</small></span></div></div>
-  </div>
-  <div id="spellbar"></div>
-  <div id="menu">
-    <button id="mute" title="Son"></button>
-  </div>
-</div>
+<div id="hud-parts"><div id="chatlog"></div><form id="say"><input name="t" placeholder="Entrée pour parler · /tp x,y" autocomplete="off"></form><button id="mute" title="Son"></button></div>
 <div id="tip" class="panel" hidden></div>
 
 
@@ -112,7 +67,7 @@ canvas.inv3d{position:absolute;left:50%;top:120px;width:300px;height:380px;margi
 <div id="win-help" class="win panel" hidden><h2>Aide<button class="x">✕</button></h2><div class="body" style="max-width:380px;line-height:1.5">
   Clic sur une case : se déplacer (course au-delà de 3 cases).<br>Clic au-delà d'un bord : changer de carte (flèche verte = sortie possible).<br>
   Raccourcis : C caractéristiques, S sorts, I inventaire, Q quêtes, U succès, J métiers, B encyclopédie, F amis, G guilde, D montures, A apparence, M carte, O options, H aide, 1–0 sorts, Entrée chat, Échap fermer.<br>
-  Commande : <code>/tp 5,-18</code> ou <code>/tp &lt;id de carte&gt;</code>.</div></div>
+  Commandes : <code>/tp 5,-18</code> ou <code>/tp &lt;id de carte&gt;</code>, <code>/stats</code> (nouvelles caractéristiques), <code>/hud</code> (replacer l'interface).<br>Interface : survoler un module fait apparaître son bandeau, qui sert à le déplacer.</div></div>
 
 <script>import(`./game.js?v=${Date.now()}`); // no caching for now: every module is fetched fresh on each load</script>
 </body></html>
